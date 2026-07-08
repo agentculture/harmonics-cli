@@ -1,13 +1,60 @@
 # harmonics-cli
 
-An agent + CLI giving agents and robots non-TTS (non-speech) audio: express meaning through pleasant sonic signatures — chimes, flutes, pulses, and tonal motifs mapped to intent, confidence, urgency, state, and identity. Turns text/sentences into notes and audio (text-to-notes / text-to-audio).
+**harmonics-cli gives an agent or robot its own non-speech VOICE.** It is the
+inverse of text-to-speech: instead of turning words into speech, it renders an
+agent's live *meaning* into short, pleasant sonic gestures — chimes, flutes,
+pulses, tonal motifs — that a listener recognizes by *who* is speaking and
+*what* they mean. It reproduces no words or phonemes; it maps meaning, not the
+sound of words (text-to-notes / text-to-audio).
 
-## What you get
+A recognizable non-speech voice makes a headless agent or robot present and
+legible by ear: with no screen to read and no speech to synthesize or parse, you
+can tell who is working, who just succeeded, and who is stuck.
+
+## The design spine — intent → sound
+
+Everything the domain renders resolves to five expressive axes:
+
+| Axis | Example values | Sonic mapping |
+|------|---|---|
+| **intent** | ack, question, success, failure, thinking, handoff | timbre / motif family (chime vs. flute vs. pulse) |
+| **confidence** | low → high | consonance, pitch stability, resolved vs. suspended cadence |
+| **urgency** | calm → urgent | tempo, attack sharpness, repetition |
+| **state** | idle, working, blocked, done | sustained pad vs. discrete events |
+| **identity** | which agent | signature motif / key / instrument per agent |
+
+Urgency is carried by tempo, attack, and repetition — never by dissonance or raw
+loudness — so the palette stays pleasant and non-fatiguing even at the urgent
+end, playing repeatedly next to a human without becoming an alarm.
+
+## Voice, not soundtrack
+
+harmonics is a **first-person utterance** an agent emits *as itself*, live and in
+the moment, driven by its own axes. It is **not** a third-person spectator
+soundtrack. The contrast is league-of-agents' replay score, which narrates a
+match from the outside off an event log; harmonics is the inverse — the agent's
+own voice, not an ambient bed you tune out. And it is **not TTS**: no words, no
+phonemes, only meaning.
+
+## Status
+
+Scaffold today: the agent-first CLI, mesh identity, skill kit, and CI baseline
+are in place; the audio domain is being built. The pure text→notes core is
+designed to stay dependency-free and offline-testable — tests assert on note
+sequences, not on a speaker. Coming text-to-notes verbs:
+
+- `harmonics play --intent success --confidence high --urgency low` — render
+  explicit axes to a note sequence (dry-run by default; `--play`/`--out` produce
+  sound or a file).
+- `harmonics say "done, tests all green"` — infer the axes from a sentence, then
+  render.
+
+## What you get today
 
 - **An agent-first CLI** cited from [teken](https://github.com/agentculture/teken)
   (`afi-cli`) — the runtime package has no third-party dependencies.
 - **A mesh identity** — `culture.yaml` (`suffix` + `backend`) and the matching
-  resident prompt file (`AGENTS.colleague.md`, since this template runs
+  resident prompt file (`AGENTS.colleague.md`, since this agent runs
   `backend: colleague`).
 - **The canonical guildmaster skill kit** (11 skills) under `.claude/skills/`,
   vendored cite-don't-import. See [`docs/skill-sources.md`](docs/skill-sources.md).
@@ -42,20 +89,11 @@ Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment
 error, `3+` reserved.
 
-## Make it your own
+## Contributing
 
-1. Rename the package `harmonics/` and the `harmonics-cli`
-   CLI/dist name throughout `pyproject.toml`, the package, `tests/`,
-   `sonar-project.properties`, and this `README.md`. The name is hard-coded in
-   ~100 places, so list every occurrence first — see the `git grep` discovery
-   command in [`CLAUDE.md`](CLAUDE.md), the authoritative rename procedure.
-2. Edit `culture.yaml` with your `suffix` and `backend`.
-3. Rewrite `CLAUDE.md` for your agent and run `/init`.
-4. Re-vendor only the skills you need from guildmaster (see
-   [`docs/skill-sources.md`](docs/skill-sources.md)).
-
-See [`CLAUDE.md`](CLAUDE.md) for the full conventions (version-bump-every-PR,
-the `cicd` PR lane, deploy setup).
+See [`CLAUDE.md`](CLAUDE.md) for the full conventions — the design-spine mapping,
+the offline-testable text→notes rule, dry-run-by-default for audio verbs,
+version-bump-every-PR, the `cicd` PR lane, and deploy setup.
 
 ## License
 

@@ -17,15 +17,21 @@ from __future__ import annotations
 _ROOT = """\
 # harmonics-cli
 
-A clonable template for AgentCulture mesh agents. It carries an agent-first CLI
-(cited from the teken `python-cli` reference), a mesh identity (`culture.yaml` +
-`CLAUDE.md`), the canonical guildmaster skill kit under `.claude/skills/`, and a
-buildable/deployable package baseline. Clone it, rename the package, edit
-`culture.yaml`, and you have a new agent.
+harmonics-cli gives an agent or robot its own **non-speech voice**. It renders
+the agent's live meaning — five axes: **intent, confidence, urgency, state,
+identity** — into short, pleasant sonic gestures (chimes, flutes, pulses, tonal
+motifs) a listener recognizes by *who* is speaking and *what* they mean. It is
+the first-person inverse of text-to-speech: it maps *meaning*, not phonemes, and
+reproduces no words.
+
+This is a first-person *utterance* the agent emits as itself, live and driven by
+its own axes — not a third-person spectator soundtrack (like league-of-agents'
+replay score, which narrates a match from the outside off an event log). Voice,
+not background; meaning, not TTS.
 
 Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 
-## Verbs
+## Verbs (today)
 
 - `harmonics whoami` — identity probe from `culture.yaml`.
 - `harmonics learn` — structured self-teaching prompt.
@@ -33,6 +39,9 @@ Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 - `harmonics overview` — descriptive snapshot of the agent.
 - `harmonics doctor` — check the agent-identity invariants.
 - `harmonics cli overview` — describe the CLI surface.
+
+Coming (text-to-notes, not built yet): `harmonics play` (explicit axes → notes)
+and `harmonics say "<sentence>"` (sentence → inferred axes → notes).
 
 ## Exit-code policy
 
