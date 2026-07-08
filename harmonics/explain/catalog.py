@@ -39,11 +39,12 @@ Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 - `harmonics overview` — descriptive snapshot of the agent.
 - `harmonics doctor` — check the agent-identity invariants.
 - `harmonics play` — render explicit axes to a note sequence (dry-run default).
+- `harmonics say "<sentence>"` — sentence → inferred axes + text contour +
+  emphasis → notes, in the agent's voice (dry-run default).
 - `harmonics cli overview` — describe the CLI surface.
 
-Coming (text-to-notes, not fully built yet): `harmonics say "<sentence>"`
-(sentence → inferred axes → notes) and real `--play` audio playback (`play`
-today renders notes only; sound output is a later increment).
+Coming: real `--play` audio playback (`play`/`say` today render notes only;
+sound output is a later increment).
 
 ## Exit-code policy
 
@@ -165,6 +166,68 @@ sequence: no file is written, no sound is made. Safe to call in a loop.
   exits with a friendly hint to use `--out` or `--json` instead.
 """
 
+_SAY = """\
+# harmonics say
+
+Renders a whole SENTENCE to notes in the agent's own voice — the payoff verb
+of the text-to-notes path (see the design spine in `CLAUDE.md` and the build
+brief, issue #1). Where `play` takes explicit axes, `say` takes free text and
+composes the full pipeline:
+
+1. `harmonics.stress.parse_emphasis` strips `*word*`/ALL-CAPS emphasis
+   markers, returning the clean text plus which word indices to stress.
+2. `harmonics.inference.infer_axes` reads the clean text and infers
+   intent/confidence/urgency/state — a static cue-table, not a model.
+3. `harmonics.identity` resolves *who* is speaking (`--as`, else
+   harmonics-cli's own identity) to a voice signature.
+4. `harmonics.contour.text_contour` renders the clean text to a followable
+   melody — ONE note per word, in the agent's key, so a human can trace the
+   tune back to the words.
+5. Axis shading colors that contour: urgency scales the whole contour's tempo
+   (urgent tightens, calm loosens); confidence reshapes only the final note
+   (high = a crisp resolved landing, low = a soft lingering tail). Neither
+   ever touches pitch, so the word-tracking melody and its in-key consonance
+   are preserved.
+6. `harmonics.stress.apply_stress` re-emphasizes the stressed word indices
+   from step 1 (louder + an octave up), on top of the shading above.
+7. `harmonics.variation.apply_variation` adds an optional deterministic
+   micro-variation pass via `--seq`.
+
+**Dry-run by default** — with no `--out`/`--midi`/`--play`, this only prints
+the note sequence: no file is written, no sound is made. Safe to call in a
+loop.
+
+## Flags
+
+- `sentence` (positional, required) — the text to speak. Emphasize a word
+  with `*asterisks*` or ALL-CAPS.
+- `--as AGENT` — derive the voice signature from this identity string.
+  Default: harmonics-cli's own signature.
+- `--seq NONCE` — deterministic micro-variation nonce (int or string); the
+  same nonce always renders the same variation.
+
+## Usage
+
+    harmonics say "done, tests all green"
+    harmonics say "did it pass?" --as my-agent
+    harmonics say "push it *now*" --json
+    harmonics say "wrap it up, no rush" --seq 7
+    harmonics say "all tests passed" --out utterance.json
+    harmonics say "all tests passed" --midi utterance.midi.json
+
+## Output modes
+
+- Dry-run (default) — the note sequence to stdout: one line per note
+  (`start dur pitch vel voice`) in text mode, or a JSON list of note objects
+  with `--json`. Writes no file, makes no sound.
+- `--out FILE` — writes the note-sequence JSON to `FILE`.
+- `--midi FILE` — writes the MIDI-like tick representation
+  (`harmonics.notes.to_midi_notes`) to `FILE`. No audio backend required for
+  either.
+- `--play` — not available yet (the audio backend is a later increment);
+  exits with a friendly hint to use `--out`/`--midi` or `--json` instead.
+"""
+
 _CLI = """\
 # harmonics cli
 
@@ -188,6 +251,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
     ("play",): _PLAY,
+    ("say",): _SAY,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }
