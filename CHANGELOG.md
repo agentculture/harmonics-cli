@@ -25,6 +25,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Live playback now prefers the **`sounddevice`** backend over `simpleaudio`
+  (the order was previously reversed). sounddevice is the only backend that can
+  honor `--device` and the pipewire/pulse default, so preferring it makes those
+  always effective when it is installed; `simpleaudio` remains a fallback used
+  only when sounddevice is unavailable.
 - A live-device failure (e.g. a PortAudio invalid-sample-rate error) now surfaces
   as a friendly environment error (exit `2`) that names the failure, lists the
   available output devices, and points at `--device` / `--wav` — instead of the

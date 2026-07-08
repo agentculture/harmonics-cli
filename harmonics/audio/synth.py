@@ -15,11 +15,13 @@ Two hard rules from ``CLAUDE.md``'s design spine:
 * audio-PRODUCING actions require an explicit flag; the only function here
   that touches a real device, :func:`play`, isolates its optional playback
   library behind a **lazy, in-function** import (tried in order:
-  ``simpleaudio``, then ``sounddevice``) so importing :mod:`harmonics.audio`
-  itself never requires a sound stack. If neither library is importable,
-  :func:`play` raises the same structured :class:`~harmonics.cli._errors.
-  CliError` every other verb failure uses, rather than a bare
-  ``ImportError`` or a silent no-op.
+  ``sounddevice``, then ``simpleaudio``) so importing :mod:`harmonics.audio`
+  itself never requires a sound stack. ``sounddevice`` is preferred because it
+  is the only backend that honors ``--device`` / the pipewire-default output
+  selection (``simpleaudio`` has no device API); ``simpleaudio`` is a lighter
+  fallback. If neither library is importable, :func:`play` raises the same
+  structured :class:`~harmonics.cli._errors.CliError` every other verb failure
+  uses, rather than a bare ``ImportError`` or a silent no-op.
 
 Articulation — how the voice MOVES between notes
 --------------------------------------------------
@@ -81,6 +83,7 @@ from array import array
 from pathlib import Path
 from typing import Sequence
 
+from harmonics.audio._playback import device_playback_error, select_output_device
 from harmonics.cli._errors import EXIT_ENV_ERROR, CliError
 from harmonics.notes import NoteEvent
 
@@ -440,87 +443,6 @@ def write_wav(
     Path(path).write_bytes(data)
 
 
-# --- live playback: output-device selection + friendly device errors ----------
-
-#: Sound-server PortAudio device names that resample (accept an arbitrary
-#: sample rate), tried IN ORDER when no device is explicitly requested.
-#: Preferring one of these makes live playback "just work" on a host whose raw
-#: ALSA ``default`` sink is a FIXED-rate device (e.g. a 16 kHz USB audio
-#: adapter) that would otherwise reject the synth's 44.1 kHz — i.e. this is
-#: what "default to pipewire" means in practice. On a host without such a
-#: device (macOS/Windows, or a plain ALSA box) none match and playback falls
-#: back to the backend's own default. Override either way with ``--device`` /
-#: ``$HARMONICS_AUDIO_DEVICE`` (see :func:`_select_output_device`).
-_PREFERRED_OUTPUT_DEVICES: tuple[str, ...] = ("pipewire", "pulse")
-
-
-def _select_output_device(sounddevice: object, requested: int | str | None) -> int | str | None:
-    """Choose which output device :func:`play` should open on ``sounddevice``.
-
-    An explicitly ``requested`` device always wins: an ``int`` (or an
-    all-digit string) is treated as a device index, any other non-empty
-    string as a name substring — both of which ``sounddevice.play(device=...)``
-    accepts. With nothing requested, prefer a resampling sound-server device
-    (see :data:`_PREFERRED_OUTPUT_DEVICES`) when one is present, returning its
-    index; otherwise return ``None`` so :func:`play` omits ``device=`` and the
-    backend uses its own default. Any failure to enumerate devices also yields
-    ``None`` (fall back to the default) rather than raising.
-    """
-    if requested is not None and requested != "":
-        if isinstance(requested, str) and requested.isdigit():
-            return int(requested)
-        return requested
-    try:
-        devices = list(sounddevice.query_devices())
-    except Exception:  # noqa: BLE001 - can't enumerate -> just use the default device
-        return None
-    for name in _PREFERRED_OUTPUT_DEVICES:
-        for index, dev in enumerate(devices):
-            if dev.get("max_output_channels", 0) > 0 and name in dev.get("name", "").lower():
-                return index
-    return None
-
-
-def _output_device_listing(sounddevice: object) -> str:
-    """A short, best-effort ``[index] name`` list of output-capable devices,
-    for the remediation hint of a device error. Returns ``""`` if the backend
-    can't be enumerated (the hint then simply omits the listing)."""
-    try:
-        devices = list(sounddevice.query_devices())
-    except Exception:  # noqa: BLE001 - listing is best-effort inside an error path
-        return ""
-    return "; ".join(
-        f"[{index}] {dev.get('name', '?')}"
-        for index, dev in enumerate(devices)
-        if dev.get("max_output_channels", 0) > 0
-    )
-
-
-def _device_playback_error(
-    sounddevice: object | None, exc: Exception, sample_rate: int
-) -> CliError:
-    """Wrap a live-device failure (e.g. a PortAudio invalid-sample-rate error
-    from a sink that can't accept the synth's rate) in the project's
-    structured :class:`~harmonics.cli._errors.CliError` — an ENVIRONMENT error
-    (:data:`~harmonics.cli._errors.EXIT_ENV_ERROR`) with an actionable hint —
-    instead of letting it reach the CLI's last-resort "unexpected error, file
-    a bug" handler. It is not a bug: the device or its routing is the problem,
-    so the hint points at ``--device`` and ``--wav``."""
-    hint = (
-        f"the audio device could not play {sample_rate} Hz audio. Select another "
-        "with --device NAME|INDEX or $HARMONICS_AUDIO_DEVICE (e.g. "
-        "--device pipewire), or render a file with --wav and play it yourself"
-    )
-    listing = _output_device_listing(sounddevice) if sounddevice is not None else ""
-    if listing:
-        hint += f". Output devices: {listing}"
-    return CliError(
-        code=EXIT_ENV_ERROR,
-        message=f"audio playback failed: {exc}",
-        remediation=hint,
-    )
-
-
 def play(
     seq: Sequence[NoteEvent],
     *,
@@ -530,47 +452,31 @@ def play(
 ) -> None:
     """Render ``seq`` and play it through a live playback backend.
 
-    Tries an optional playback library, in order: ``simpleaudio``, then
-    ``sounddevice`` — both imported LAZILY, right here, so importing
+    Tries an optional playback library, in order: ``sounddevice``, then
+    ``simpleaudio`` — both imported LAZILY, right here, so importing
     :mod:`harmonics.audio` (or calling :func:`render_wav`/:func:`write_wav`)
-    never requires either to be installed.
+    never requires either to be installed. ``sounddevice`` is preferred
+    because it is the only backend that honors ``device`` (and the
+    pipewire/pulse auto-preference); ``simpleaudio`` is a lighter fallback for
+    an environment that only has it.
 
     ``device`` selects the output device for the ``sounddevice`` backend (an
     index or a name substring, e.g. ``"pipewire"``); with ``device=None`` a
     resampling sound-server device is preferred when present so playback works
     on a host whose default sink is fixed-rate — see
-    :func:`_select_output_device`. (``simpleaudio`` has no device-selection
-    API, so ``device`` is ignored on that backend.)
+    :func:`~harmonics.audio._playback.select_output_device`. (``simpleaudio``
+    has no device-selection API, so ``device`` is silently ignored on that
+    fallback backend; that only happens when ``sounddevice`` is unavailable.)
 
     Raises the project's structured :class:`~harmonics.cli._errors.CliError`
     (exit :data:`~harmonics.cli._errors.EXIT_ENV_ERROR`) in two cases, rather
     than letting a bare ``ImportError``, a device ``PortAudioError``, or a
     silent no-op reach the caller: (1) neither backend is importable, and
     (2) a backend is present but the device fails to play (bad sample rate,
-    busy device, …) — see :func:`_device_playback_error`.
+    busy device, …) — see
+    :func:`~harmonics.audio._playback.device_playback_error`.
     """
     data = render_wav(seq, sample_rate=sample_rate, articulation=articulation)
-
-    try:
-        import simpleaudio  # type: ignore[import-not-found]
-    except ImportError:
-        simpleaudio = None  # type: ignore[assignment]
-
-    if simpleaudio is not None:
-        with wave.open(io.BytesIO(data), "rb") as wf:
-            frames = wf.readframes(wf.getnframes())
-            channels = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            framerate = wf.getframerate()
-        # simpleaudio has no device-selection API, so ``device`` applies to the
-        # sounddevice backend only; a device failure here is still converted to
-        # the structured CliError contract rather than a bare traceback.
-        try:
-            play_obj = simpleaudio.WaveObject(frames, channels, sampwidth, framerate).play()
-            play_obj.wait_done()
-        except Exception as exc:  # noqa: BLE001 - any device failure -> friendly CliError
-            raise _device_playback_error(None, exc, framerate) from exc
-        return
 
     try:
         import sounddevice  # type: ignore[import-not-found]
@@ -595,7 +501,7 @@ def play(
         samples.frombytes(frames)
         if sys.byteorder == "big":
             samples.byteswap()
-        target = _select_output_device(sounddevice, device)
+        target = select_output_device(sounddevice, device)
         # Only pass device= when one was actually resolved, so a backend (or a
         # test double) with no device-selection support still plays on the
         # default device.
@@ -604,7 +510,28 @@ def play(
             sounddevice.play(samples, framerate, **play_kwargs)
             sounddevice.wait()
         except Exception as exc:  # noqa: BLE001 - any device failure -> friendly CliError
-            raise _device_playback_error(sounddevice, exc, framerate) from exc
+            raise device_playback_error(sounddevice, exc, framerate) from exc
+        return
+
+    try:
+        import simpleaudio  # type: ignore[import-not-found]
+    except ImportError:
+        simpleaudio = None  # type: ignore[assignment]
+
+    if simpleaudio is not None:
+        with wave.open(io.BytesIO(data), "rb") as wf:
+            frames = wf.readframes(wf.getnframes())
+            channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate()
+        # simpleaudio (the fallback) has no device-selection API, so ``device``
+        # cannot be honored here; a device failure is still converted to the
+        # structured CliError contract rather than a bare traceback.
+        try:
+            play_obj = simpleaudio.WaveObject(frames, channels, sampwidth, framerate).play()
+            play_obj.wait_done()
+        except Exception as exc:  # noqa: BLE001 - any device failure -> friendly CliError
+            raise device_playback_error(None, exc, framerate) from exc
         return
 
     raise CliError(

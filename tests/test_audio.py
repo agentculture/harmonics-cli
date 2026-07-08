@@ -157,6 +157,7 @@ def test_play_threads_articulation_through_to_render(monkeypatch: pytest.MonkeyP
     fake_module = type(sys)("simpleaudio")
     fake_module.WaveObject = _FakeWaveObject  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     seq = _seq()
     play(seq, articulation="alien")
@@ -250,10 +251,13 @@ class _FakeWaveObject:
         return obj
 
 
-def test_play_uses_simpleaudio_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_play_uses_simpleaudio_when_sounddevice_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``simpleaudio`` is only the fallback backend: it is used here because
+    ``sounddevice`` is unavailable, not because it is preferred."""
     fake_module = type(sys)("simpleaudio")
     fake_module.WaveObject = _FakeWaveObject  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     seq = _seq()
     play(seq)
@@ -284,9 +288,11 @@ class _FakeSoundDevice:
         self.waited = True
 
 
-def test_play_falls_back_to_sounddevice_when_simpleaudio_absent(
+def test_play_uses_sounddevice_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """``sounddevice`` is the preferred backend now: it is used whenever it is
+    importable, even with no ``simpleaudio`` fallback in play."""
     monkeypatch.setitem(sys.modules, "simpleaudio", None)
     fake_sd = _FakeSoundDevice()
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
@@ -299,6 +305,38 @@ def test_play_falls_back_to_sounddevice_when_simpleaudio_absent(
     assert samplerate == DEFAULT_SAMPLE_RATE
     assert len(samples) > 0
     assert fake_sd.waited is True
+
+
+def test_play_prefers_sounddevice_over_simpleaudio_when_both_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for the reorder: when BOTH backends are importable,
+    ``sounddevice`` must be chosen (and ``--device`` honored) rather than
+    ``simpleaudio`` silently winning and ignoring ``device``."""
+    simpleaudio_calls: list[tuple] = []
+
+    class _FakeWaveObjectRecording:
+        def __init__(
+            self, audio_data: bytes, num_channels: int, bytes_per_sample: int, sample_rate: int
+        ) -> None:
+            simpleaudio_calls.append((audio_data, num_channels, bytes_per_sample, sample_rate))
+
+        def play(self) -> _FakePlayObj:
+            return _FakePlayObj()
+
+    fake_simpleaudio = type(sys)("simpleaudio")
+    fake_simpleaudio.WaveObject = _FakeWaveObjectRecording  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "simpleaudio", fake_simpleaudio)
+
+    fake_sd = _FakeSoundDeviceWithDevices([{"name": "pipewire", "max_output_channels": 64}])
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    play(_seq(), device="pipewire")
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == "pipewire"
+    assert fake_sd.waited is True
+    assert simpleaudio_calls == []
 
 
 # --- play(): sounddevice path decodes correctly on a big-endian host --------
@@ -352,7 +390,7 @@ def test_play_sounddevice_byteswaps_samples_on_big_endian_host(
 
 class _FakeSoundDeviceWithDevices:
     """Fake sounddevice exposing ``query_devices()`` so
-    :func:`~harmonics.audio.synth._select_output_device`'s auto-selection
+    :func:`~harmonics.audio._playback.select_output_device`'s auto-selection
     logic can be exercised, and a ``play()`` that records the resolved
     ``device=`` kwarg (unlike :class:`_FakeSoundDevice` above, which has no
     device-selection support at all)."""
@@ -497,6 +535,7 @@ def test_play_simpleaudio_failure_raises_friendly_cli_error(
     fake_module = type(sys)("simpleaudio")
     fake_module.WaveObject = _FakeWaveObjectRaisingOnPlay  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     with pytest.raises(CliError) as exc:
         play(_seq())

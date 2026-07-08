@@ -27,10 +27,11 @@ actual WAV file (:mod:`harmonics.audio`) — neither needs a live audio device,
 and either raises a structured :class:`~harmonics.cli._errors.CliError` (not a
 bare traceback) if the write itself fails, e.g. a missing parent directory.
 ``--play`` renders the gesture and plays it via a live backend
-(:func:`harmonics.audio.play`, tried in order: ``simpleaudio``, then
-``sounddevice``) if either is installed; with neither installed it fails
+(:func:`harmonics.audio.play`, tried in order: ``sounddevice``, then
+``simpleaudio``) if either is installed; with neither installed it fails
 loudly with a friendly ``CliError`` hint rather than silently no-op'ing — use
 ``--wav`` instead when you just want a file and no device at all.
+``--device`` picks which output device ``--play`` opens (see its flag help).
 
 ``--articulation`` (default ``"smooth"``) selects HOW ``--wav``/``--play``
 synthesize the gesture — a continuous gliding voice by default, or the

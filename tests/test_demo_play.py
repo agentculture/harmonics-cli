@@ -111,7 +111,11 @@ class _FakePlayObj:
         self.waited = True
 
 
-def test_play_clips_uses_simpleaudio_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_play_clips_uses_simpleaudio_when_sounddevice_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``simpleaudio`` is only the fallback backend: it is used here because
+    ``sounddevice`` is unavailable, not because it is preferred."""
     calls: list[tuple] = []
 
     def fake_play_buffer(frames, nchannels, sampwidth, framerate):  # noqa: ANN001
@@ -122,6 +126,7 @@ def test_play_clips_uses_simpleaudio_when_available(monkeypatch: pytest.MonkeyPa
     fake_module = type(sys)("simpleaudio")
     fake_module.play_buffer = fake_play_buffer  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     from harmonics.demo.play import play_clips
 
@@ -149,9 +154,11 @@ class _FakeSoundDevice:
         self.waited = True
 
 
-def test_play_clips_falls_back_to_sounddevice_when_simpleaudio_absent(
+def test_play_clips_uses_sounddevice_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """``sounddevice`` is the preferred backend now: it is used whenever it is
+    importable, even with no ``simpleaudio`` fallback in play."""
     monkeypatch.setitem(sys.modules, "simpleaudio", None)
     fake_sd = _FakeSoundDevice()
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
@@ -168,6 +175,35 @@ def test_play_clips_falls_back_to_sounddevice_when_simpleaudio_absent(
     assert fake_sd.waited is True
 
 
+def test_play_clips_prefers_sounddevice_over_simpleaudio_when_both_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for the reorder: when BOTH backends are importable,
+    ``sounddevice`` must be chosen (and ``--device`` honored) rather than
+    ``simpleaudio`` silently winning and ignoring ``device``."""
+    simpleaudio_calls: list[tuple] = []
+
+    def fake_play_buffer(frames, nchannels, sampwidth, framerate):  # noqa: ANN001
+        simpleaudio_calls.append((frames, nchannels, sampwidth, framerate))
+        return _FakePlayObj()
+
+    fake_simpleaudio = type(sys)("simpleaudio")
+    fake_simpleaudio.play_buffer = fake_play_buffer  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "simpleaudio", fake_simpleaudio)
+
+    fake_sd = _FakeSoundDeviceWithDevices([{"name": "pipewire", "max_output_channels": 64}])
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    from harmonics.demo.play import play_clips
+
+    play_clips([_make_clip("one")], gap_seconds=0.0, device="pipewire")
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == "pipewire"
+    assert fake_sd.waited is True
+    assert simpleaudio_calls == []
+
+
 # --- play_clips(): sequencing (multiple clips, gap between them) ------------
 
 
@@ -181,6 +217,7 @@ def test_play_clips_plays_every_clip_in_order(monkeypatch: pytest.MonkeyPatch) -
     fake_module = type(sys)("simpleaudio")
     fake_module.play_buffer = fake_play_buffer  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     from harmonics.demo.play import play_clips
 
@@ -200,6 +237,7 @@ def test_play_clips_sleeps_between_but_not_after_last_clip(
     fake_module = type(sys)("simpleaudio")
     fake_module.play_buffer = lambda *a, **k: _FakePlayObj()  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     sleeps: list[float] = []
     monkeypatch.setattr(time, "sleep", lambda s: sleeps.append(s))
@@ -227,7 +265,7 @@ def test_play_clips_default_gap_is_positive() -> None:
 
 class _FakeSoundDeviceWithDevices:
     """Fake sounddevice exposing ``query_devices()`` so
-    :func:`~harmonics.audio.synth._select_output_device`'s auto-selection
+    :func:`~harmonics.audio._playback.select_output_device`'s auto-selection
     logic can be exercised, and a ``play()`` that records the resolved
     ``device=`` kwarg (unlike :class:`_FakeSoundDevice` above, which has no
     device-selection support at all)."""
