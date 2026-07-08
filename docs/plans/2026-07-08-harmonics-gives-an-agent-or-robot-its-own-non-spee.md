@@ -1,4 +1,4 @@
-# Build Plan — harmonics gives an agent or robot its own non-speech VOICE: it turns the agent's live intent, confidence, urgency, state, and identity into short, pleasant sonic gestures a listener recognizes by who is speaking and what they mean — the first-person inverse of a spectator soundtrack, rendered as a note sequence first and sound second.
+# Build Plan — harmonics gives an agent or robot its own non-speech VOICE: it turns the agent's live intent, confidence, urgency, state, and identity into short, pleasant sonic gestures a listener recognizes by who is speaking and what they mean — the first-person inverse of a spectator soundtrack, rendered as a note sequence first and sound second
 
 slug: `harmonics-gives-an-agent-or-robot-its-own-non-spee` · status: `exported` · from frame: `harmonics-gives-an-agent-or-robot-its-own-non-spee`
 
