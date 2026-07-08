@@ -38,10 +38,12 @@ Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 - `harmonics explain <path>` — markdown docs for any noun/verb.
 - `harmonics overview` — descriptive snapshot of the agent.
 - `harmonics doctor` — check the agent-identity invariants.
+- `harmonics play` — render explicit axes to a note sequence (dry-run default).
 - `harmonics cli overview` — describe the CLI surface.
 
-Coming (text-to-notes, not built yet): `harmonics play` (explicit axes → notes)
-and `harmonics say "<sentence>"` (sentence → inferred axes → notes).
+Coming (text-to-notes, not fully built yet): `harmonics say "<sentence>"`
+(sentence → inferred axes → notes) and real `--play` audio playback (`play`
+today renders notes only; sound output is a later increment).
 
 ## Exit-code policy
 
@@ -119,6 +121,50 @@ skills-present check. Exits 1 when unhealthy.
     harmonics doctor --json
 """
 
+_PLAY = """\
+# harmonics play
+
+Renders explicit axes to a note sequence — the first domain verb (see the
+design spine in `CLAUDE.md` and the build brief, issue #1). Composes
+`harmonics.axes` (the vocabulary), `harmonics.identity` (the *who* → voice
+signature), and `harmonics.mapping` (axes → notes), plus an optional
+deterministic micro-variation pass (`harmonics.variation`) via `--seq`.
+
+**Dry-run by default** — with no `--out`/`--play`, this only prints the note
+sequence: no file is written, no sound is made. Safe to call in a loop.
+
+## Axes
+
+- `--intent` (required) — one of: ack, question, success, failure, thinking,
+  handoff. Picks the motif family.
+- `--confidence` — low, medium, high. Shades the cadence (resolved vs.
+  suspended).
+- `--urgency` — calm, normal, urgent. Shades tempo, attack, repetition.
+- `--state` — idle, working, blocked, done. Shades sustain vs. discrete.
+- `--as AGENT` — derive the voice signature (tonal center + instrument) from
+  this identity string. Default: harmonics-cli's own signature.
+- `--seq NONCE` — deterministic micro-variation nonce (int or string); the
+  same nonce always renders the same variation.
+
+## Usage
+
+    harmonics play --intent success
+    harmonics play --intent question --confidence low --as my-agent
+    harmonics play --intent success --json
+    harmonics play --intent success --seq 7
+    harmonics play --intent success --out gesture.json
+
+## Output modes
+
+- Dry-run (default) — the note sequence to stdout: one line per note
+  (`start dur pitch vel voice`) in text mode, or a JSON list of note objects
+  with `--json`. Writes no file, makes no sound.
+- `--out FILE` — writes the note-sequence JSON to `FILE`; prints a one-line
+  confirmation. No audio backend required.
+- `--play` — not available yet (the audio backend is a later increment);
+  exits with a friendly hint to use `--out` or `--json` instead.
+"""
+
 _CLI = """\
 # harmonics cli
 
@@ -141,6 +187,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("explain",): _EXPLAIN,
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
+    ("play",): _PLAY,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }

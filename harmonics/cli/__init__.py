@@ -67,6 +67,7 @@ def _build_parser() -> argparse.ArgumentParser:
     from harmonics.cli._commands import explain as _explain_cmd
     from harmonics.cli._commands import learn as _learn_cmd
     from harmonics.cli._commands import overview as _overview_cmd
+    from harmonics.cli._commands import play as _play_cmd
     from harmonics.cli._commands import whoami as _whoami_cmd
 
     parser = _CliArgumentParser(
@@ -91,6 +92,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _explain_cmd.register(sub)
     _overview_cmd.register(sub)
     _doctor_cmd.register(sub)
+    _play_cmd.register(sub)
     _cli_group.register(sub)
     # Register your own noun groups here:
     #   from harmonics.cli._commands import my_noun as _my_noun_group
