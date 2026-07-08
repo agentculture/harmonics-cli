@@ -20,12 +20,14 @@ isolation:
   sound robotically identical between calls.
 
 **Dry-run by default** — the safe-by-default rule for a CLI agents call in a
-loop. With no ``--out``/``--play``, this verb only prints the note sequence to
-stdout: no file is written, no sound is made. ``--out FILE`` captures the note
-sequence as JSON — that needs no audio backend at all. ``--play`` would
-produce actual sound, but the audio backend does not exist yet (planned for a
-later increment, t12); it fails loudly with a friendly hint rather than
-silently no-op'ing.
+loop. With no ``--out``/``--wav``/``--play``, this verb only prints the note
+sequence to stdout: no file is written, no sound is made. ``--out FILE``
+captures the note sequence as JSON and ``--wav FILE`` renders and writes an
+actual WAV file (:mod:`harmonics.audio`) — neither needs a live audio device.
+``--play`` renders the gesture and plays it through a live backend
+(:func:`harmonics.audio.play`, tried in order: ``simpleaudio``, then
+``sounddevice``); with neither installed it fails loudly with a friendly
+``CliError`` hint rather than silently no-op'ing.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ import argparse
 from pathlib import Path
 
 from harmonics.axes import CONFIDENCES, INTENTS, STATES, URGENCIES, Axes
-from harmonics.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
+from harmonics.cli._errors import EXIT_USER_ERROR, CliError
 from harmonics.cli._output import emit_result
 from harmonics.identity import derive_signature, signature_for
 from harmonics.mapping import render_gesture
@@ -87,19 +89,33 @@ def cmd_play(args: argparse.Namespace) -> int:
 
     axes = _build_axes(args)
 
-    if args.play:
-        # The audio backend is a later increment (t12); fail loudly rather
-        # than silently no-op'ing so an agent never thinks sound played.
-        raise CliError(
-            code=EXIT_ENV_ERROR,
-            message="audio playback is not available yet",
-            remediation="use --out to capture the note sequence, or --json to print it",
-        )
-
     sig = signature_for(args.as_agent) if args.as_agent else derive_signature(DEFAULT_IDENTITY)
     notes = render_gesture(axes, root_pitch=sig.root_pitch, instrument=sig.instrument)
     if args.seq is not None:
         notes = apply_variation(notes, args.seq)
+
+    if args.play:
+        # Lazy import: harmonics.audio's own optional playback backend is
+        # isolated behind this call, so importing this module (and every
+        # other CLI path) never requires a sound stack.
+        from harmonics.audio import play as play_audio
+
+        play_audio(notes)
+        if json_mode:
+            emit_result({"played": True, "notes": len(notes)}, json_mode=True)
+        else:
+            emit_result(f"played {len(notes)} note(s)", json_mode=False)
+        return 0
+
+    if args.wav:
+        from harmonics.audio import write_wav
+
+        write_wav(notes, args.wav)
+        if json_mode:
+            emit_result({"wrote": args.wav, "notes": len(notes)}, json_mode=True)
+        else:
+            emit_result(f"wrote {len(notes)} note(s) to {args.wav}", json_mode=False)
+        return 0
 
     if args.out:
         Path(args.out).write_text(sequence_to_json(notes), encoding="utf-8")
@@ -168,8 +184,14 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Write the note-sequence JSON to FILE instead of the dry-run listing.",
     )
     p.add_argument(
+        "--wav",
+        default=None,
+        metavar="FILE",
+        help="Render and write a WAV audio file to FILE (no live device needed).",
+    )
+    p.add_argument(
         "--play",
         action="store_true",
-        help="Play audio (not available yet; use --out or --json instead).",
+        help="Render and play audio live (needs 'simpleaudio' or 'sounddevice' installed).",
     )
     p.set_defaults(func=cmd_play)

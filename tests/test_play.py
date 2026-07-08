@@ -2,14 +2,17 @@
 
 Covers the acceptance criteria for the first domain verb: dry-run text/JSON
 output, determinism (repeat calls, ``--seq``, and cross-identity divergence),
-``--out`` file capture vs. the no-file dry-run default, the structured error
-contract for a bad ``--intent``, the friendly not-yet-available ``--play``
-error, and that ``harmonics explain play`` resolves.
+``--out``/``--wav`` file capture vs. the no-file dry-run default, the
+structured error contract for a bad ``--intent``, the friendly
+no-backend-installed ``--play`` error (cycle t12 — the offline audio backend
+exists now; CI simply has no playback library installed), and that
+``harmonics explain play`` resolves.
 """
 
 from __future__ import annotations
 
 import json
+import wave
 from pathlib import Path
 
 import pytest
@@ -117,6 +120,35 @@ def test_play_default_writes_no_file(tmp_path: Path, capsys: pytest.CaptureFixtu
     assert list(tmp_path.iterdir()) == []
 
 
+# --- --wav: the offline audio backend (cycle t12) ---------------------------
+
+
+def test_play_wav_writes_a_valid_wav_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "gesture.wav"
+    rc = main(["play", "--intent", "success", "--wav", str(target)])
+    assert rc == 0
+    assert target.is_file()
+    with wave.open(str(target), "rb") as wf:
+        assert wf.getnchannels() == 1
+        assert wf.getsampwidth() == 2
+        assert wf.getnframes() > 0
+    out = capsys.readouterr().out.strip()
+    assert str(target) in out
+
+
+def test_play_wav_json_reports_wrote_and_note_count(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "gesture.wav"
+    rc = main(["play", "--intent", "success", "--wav", str(target), "--json"])
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["wrote"] == str(target)
+    assert payload["notes"] > 0
+
+
 # --- error contract (criterion 5) -------------------------------------------
 
 
@@ -138,13 +170,18 @@ def test_play_missing_intent_exits_1_structured(capsys: pytest.CaptureFixture[st
     assert "hint:" in err
 
 
-def test_play_flag_not_available_yet(capsys: pytest.CaptureFixture[str]) -> None:
+def test_play_flag_with_no_backend_installed(capsys: pytest.CaptureFixture[str]) -> None:
+    """CI (and this test env) has neither ``simpleaudio`` nor ``sounddevice``
+    installed, so ``--play`` surfaces the offline backend's friendly
+    ``CliError`` (exit 2) rather than a traceback or a silent no-op."""
     rc = main(["play", "--intent", "success", "--play"])
     assert rc == 2
     err = capsys.readouterr().err
     assert err.startswith("error:")
-    assert "not available yet" in err
+    assert "no audio playback backend" in err
     assert "hint:" in err
+    assert "simpleaudio" in err
+    assert "sounddevice" in err
 
 
 # --- explain (criterion 6) --------------------------------------------------
