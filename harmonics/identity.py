@@ -29,7 +29,7 @@ Pure stdlib, no third-party imports — this sits in the offline-testable core.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Mapping
 
 #: Base timbre palette a signature's ``instrument`` is drawn from. Kept small
@@ -148,4 +148,12 @@ def signature_for(
             f"unknown Signature field(s) in override for {identity!r}: "
             f"{', '.join(sorted(unknown))}"
         )
-    return replace(base, **partial)
+    # Build the merged Signature explicitly (rather than returning
+    # ``dataclasses.replace(base, **partial)`` directly) so the declared and
+    # inferred return type is ``Signature``, not the generic
+    # ``DataclassInstance`` that ``replace`` returns.
+    return Signature(
+        root_pitch=partial.get("root_pitch", base.root_pitch),
+        instrument=partial.get("instrument", base.instrument),
+        seed=partial.get("seed", base.seed),
+    )

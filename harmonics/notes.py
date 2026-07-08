@@ -71,7 +71,7 @@ class NoteEvent:
             )
         if not (_MIN_VELOCITY <= self.velocity <= _MAX_VELOCITY):
             raise ValueError(
-                f"velocity must be in [{_MIN_VELOCITY}, {_MAX_VELOCITY}], " f"got {self.velocity!r}"
+                f"velocity must be in [{_MIN_VELOCITY}, {_MAX_VELOCITY}], got {self.velocity!r}"
             )
         if not self.voice.strip():
             raise ValueError("voice must be a non-empty string")
