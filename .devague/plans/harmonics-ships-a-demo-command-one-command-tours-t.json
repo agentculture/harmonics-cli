@@ -1,0 +1,288 @@
+{
+  "slug": "harmonics-ships-a-demo-command-one-command-tours-t",
+  "title": "harmonics ships a demo command: one command tours the whole agent voice \u2014 play it live, write a self-contained HTML gallery, or stream the clips into your own code",
+  "frame_slug": "harmonics-ships-a-demo-command-one-command-tours-t",
+  "schema_version": 1,
+  "status": "exported",
+  "created": "2026-07-08T10:56:47Z",
+  "updated": "2026-07-08T11:02:30Z",
+  "targets": [
+    {
+      "id": "c1",
+      "kind": "announcement",
+      "text": "harmonics ships a demo command: one command tours the whole agent voice \u2014 play it live, write a self-contained HTML gallery, or stream the clips into your own code"
+    },
+    {
+      "id": "h1",
+      "kind": "honesty",
+      "text": "a single 'harmonics demo' with no args runs (dry-run, lists the tour), and each output mode is reachable by one documented flag (--play / --html / --wav / --out / --json)"
+    },
+    {
+      "id": "c2",
+      "kind": "audience",
+      "text": "developers integrating the harmonics voice, humans who want to hear it without hand-running a script, and other Python code embedding the tour"
+    },
+    {
+      "id": "h9",
+      "kind": "honesty",
+      "text": "explain/README names all three audiences and each maps to a concrete mode: humans -> --play/--html, integrating developers -> showcase(), embedding code -> --json/showcase()"
+    },
+    {
+      "id": "c3",
+      "kind": "before_state",
+      "text": "v0.5.0 can render the whole voice, but there is no single command that shows it off \u2014 the 24-clip live-test gallery was a hand-built browser script, not shippable"
+    },
+    {
+      "id": "h10",
+      "kind": "honesty",
+      "text": "demo reproduces the live-test tour as a shipped command \u2014 the same clip families the hand-built gallery had, rendered by the real CLI, not a one-off script"
+    },
+    {
+      "id": "c4",
+      "kind": "after_state",
+      "text": "one command tours the voice across every design axis in three output modes \u2014 play live, write a file (HTML gallery / per-clip WAVs / concatenated WAV), or stream/import \u2014 dry-run by default"
+    },
+    {
+      "id": "h11",
+      "kind": "honesty",
+      "text": "one 'harmonics demo' invocation reaches every output mode via a single flag each and covers all axis groups; tests over the mode flags verify this"
+    },
+    {
+      "id": "c5",
+      "kind": "why_it_matters",
+      "text": "the voice is the product; a one-command showcase is how anyone discovers and enjoys it without wiring the pipeline themselves, and it doubles as a living end-to-end integration test"
+    },
+    {
+      "id": "h12",
+      "kind": "honesty",
+      "text": "running demo exercises the whole pipeline end-to-end (axes -> mapping/contour -> variation -> synth), so a break anywhere surfaces as a failing demo test"
+    },
+    {
+      "id": "c6",
+      "kind": "boundary",
+      "text": "packaging over the existing pipeline (axes/mapping/identity/variation/inference/contour/stress + audio backend), not new synthesis \u2014 no new axes, motifs, or general audio-export tooling; the matrix is curated and fixed"
+    },
+    {
+      "id": "h13",
+      "kind": "honesty",
+      "text": "a test asserts demo introduces no new synthesis/axis code path \u2014 it renders only via the existing render_gesture/text_contour/render_wav and the axes vocabulary"
+    },
+    {
+      "id": "c7",
+      "kind": "success_signal",
+      "text": "harmonics demo with no flags dry-runs (lists clips + axes); --json and showcase() yield note sequences per clip offline with no audio device; --html writes a deterministic self-contained gallery; only --play needs a backend; explain + doctor stay green"
+    },
+    {
+      "id": "h2",
+      "kind": "honesty",
+      "text": "tests assert: no-flag dry-run emits the clip list with axes; --json emits a note sequence per clip; importing harmonics.demo pulls in no audio backend (simpleaudio/sounddevice stay unimported)"
+    },
+    {
+      "id": "c8",
+      "kind": "requirement",
+      "text": "three output modes: --play (live, sequential, needs a backend), file (--html gallery / --wav DIR per-clip / --out concatenated WAV), and stream/import (public showcase() + --json)"
+    },
+    {
+      "id": "h3",
+      "kind": "honesty",
+      "text": "each mode is tested: --play is guarded by a lazy backend import raising the friendly CliError when absent; --html/--wav/--out write valid files with no audio device; showcase()/--json run with no device"
+    },
+    {
+      "id": "c9",
+      "kind": "requirement",
+      "text": "a public harmonics.demo.showcase() yields one (label, axes, note_sequence, wav_bytes) per clip, deterministic and offline (WAV bytes rendered with no audio device), so other Python code can embed or stream the tour"
+    },
+    {
+      "id": "h4",
+      "kind": "honesty",
+      "text": "showcase() is importable from harmonics.demo, yields a (label, axes, note_sequence, wav_bytes) tuple per clip, needs no audio device, and is deterministic \u2014 two calls produce byte-identical wav_bytes"
+    },
+    {
+      "id": "c10",
+      "kind": "requirement",
+      "text": "the showcase matrix lives as data (a table of label + argv/axes) covering intents, identity across ~5 agents, confidence/urgency shading, say-tracks-words sentences, and stress \u2014 so it is easy to extend without touching rendering"
+    },
+    {
+      "id": "h5",
+      "kind": "honesty",
+      "text": "the matrix is a module-level data table; a test enumerates it and asserts it covers all five content groups (intents, identity, shading, say, stress); adding a row requires no change to rendering code"
+    },
+    {
+      "id": "c11",
+      "kind": "requirement",
+      "text": "the pure text->notes path stays dependency-free and offline-testable: default dry-run lists clips+axes, --json/--html/--wav/--out all work with no audio device and --html is deterministic (snapshot-testable); only --play imports a backend"
+    },
+    {
+      "id": "h6",
+      "kind": "honesty",
+      "text": "the full test path passes with audio backends uninstalled, and --html output is byte-deterministic across two runs (a snapshot test pins it)"
+    },
+    {
+      "id": "c12",
+      "kind": "requirement",
+      "text": "demo ships an explain catalog entry and keeps doctor / the afi rubric green (every verb resolves in the catalog; producing sound or files needs an explicit flag)"
+    },
+    {
+      "id": "h7",
+      "kind": "honesty",
+      "text": "test_every_catalog_path_resolves covers the ('demo',) path and 'teken cli doctor . --strict' stays green"
+    },
+    {
+      "id": "c14",
+      "kind": "requirement",
+      "text": "demo exposes a top-level --articulation {discrete,speechy,smooth,alien} flag that re-renders the entire tour in that voice (default smooth, note sequences unchanged), and the matrix gains a dedicated 'articulations' group rendering one sentence in all four styles back-to-back"
+    },
+    {
+      "id": "h8",
+      "kind": "honesty",
+      "text": "a test asserts --articulation re-renders every clip through the chosen synth style with note sequences unchanged, and the 'articulations' matrix group yields exactly the four styles (discrete/speechy/smooth/alien) for one sentence"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "t1",
+      "summary": "Showcase matrix as data (harmonics/demo/matrix.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "harmonics/demo/matrix.py defines a module-level data table (list of clip specs: label, group, kind [play|say], plus axes/argv or sentence) with NO rendering code and NO audio import",
+        "tests/test_demo_matrix.py enumerates the table and asserts all six groups are present: intents (all 6 intents), identity (~5 distinct agents), shading (confidence+urgency), say (sentences), stress, articulations",
+        "the articulations group renders exactly one sentence in the four styles discrete/speechy/smooth/alien; adding a row requires no change outside matrix.py"
+      ],
+      "deps": [],
+      "covers": [
+        "c3",
+        "h10",
+        "c6",
+        "c10",
+        "h5",
+        "c14",
+        "h8"
+      ]
+    },
+    {
+      "id": "t2",
+      "summary": "Public showcase() core (harmonics/demo/core.py + demo/__init__.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "harmonics.demo.showcase() is importable and yields one (label, axes, note_sequence, wav_bytes) per matrix clip; a test asserts the 4-tuple shape and that the count equals the matrix length",
+        "showcase() is deterministic and offline: two calls produce byte-identical wav_bytes, and importing harmonics.demo imports no audio backend (simpleaudio/sounddevice absent from sys.modules)",
+        "showcase() renders only via the existing pipeline (render_gesture/text_contour/apply_stress/apply_variation/identity + audio.synth.render_wav) \u2014 a test asserts the note sequence for a sample clip equals the direct pipeline output (no new synthesis)"
+      ],
+      "deps": [
+        "t1"
+      ],
+      "covers": [
+        "c9",
+        "h4",
+        "c5",
+        "h12",
+        "h13",
+        "c11",
+        "h2"
+      ]
+    },
+    {
+      "id": "t3",
+      "summary": "HTML gallery renderer (harmonics/demo/gallery.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "harmonics/demo/gallery.py render_gallery(clips) -> str returns a self-contained HTML string: WAVs embedded as base64 data-URIs, per-clip label/axes/notes, light+dark themes, and NO external hosts (no http(s):// references)",
+        "output is byte-deterministic: render_gallery(clips) called twice on the same clips returns identical strings; tests/test_demo_gallery.py pins this and asserts the no-external-reference property, with no audio device"
+      ],
+      "deps": [
+        "t2"
+      ],
+      "covers": [
+        "h6",
+        "c11"
+      ]
+    },
+    {
+      "id": "t4",
+      "summary": "File-output modes (harmonics/demo/files.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "harmonics/demo/files.py provides write_wav_dir(clips, dir) [one WAV per clip], write_concat_wav(clips, path) [one concatenated WAV with a short gap between clips], and json_payload(clips) [note-sequence-per-clip structure]",
+        "tests/test_demo_files.py asserts all three run with no audio device, the written files have a valid RIFF/WAVE header, and json_payload(clips) is JSON-serializable with one note sequence per clip"
+      ],
+      "deps": [
+        "t2"
+      ],
+      "covers": [
+        "c8",
+        "h3"
+      ]
+    },
+    {
+      "id": "t5",
+      "summary": "Live playback mode (harmonics/demo/play.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "harmonics/demo/play.py play_clips(clips) plays each clip wav_bytes in sequence via a LAZY backend import (simpleaudio/sounddevice); when neither is installed it raises the friendly CliError, never a bare ImportError",
+        "tests/test_demo_play.py asserts importing harmonics.demo.play imports no backend at module load, and play_clips raises CliError (not ImportError) when both backends are absent (monkeypatched sys.modules)"
+      ],
+      "deps": [
+        "t2"
+      ],
+      "covers": [
+        "c8",
+        "h3"
+      ]
+    },
+    {
+      "id": "t6",
+      "summary": "The demo CLI verb + registration (harmonics/cli/_commands/demo.py, wire into cli/__init__.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "harmonics demo with no flags dry-runs: emits the clip list with axes to stdout via emit_result, imports no audio backend, exits 0; --json emits the note-sequence-per-clip payload on the same stream",
+        "each output mode is reachable by one flag: --html FILE (gallery), --wav DIR (per-clip), --out FILE (concatenated), --play (live); producing sound or files requires the explicit flag; I/O failures raise CliError (no traceback leaks)",
+        "--articulation {discrete,speechy,smooth,alien} re-renders the whole tour through that synth style (default smooth); a test asserts changing --articulation changes wav bytes but leaves note sequences unchanged",
+        "the verb is registered via one register(sub) line in cli/__init__.py; harmonics demo --help works; cmd_demo returns int|None; tests/test_demo_cli.py covers dry-run, --json, each file flag (tmp path), the --play CliError path, and --articulation"
+      ],
+      "deps": [
+        "t3",
+        "t4",
+        "t5"
+      ],
+      "covers": [
+        "c1",
+        "h1",
+        "c4",
+        "h11",
+        "c7",
+        "h2",
+        "c8",
+        "h3",
+        "c12",
+        "c14",
+        "h8"
+      ]
+    },
+    {
+      "id": "t7",
+      "summary": "Explain catalog entry for demo + doctor stays green (harmonics/explain/catalog.py)",
+      "origin": "llm",
+      "status": "confirmed",
+      "acceptance_criteria": [
+        "harmonics/explain/catalog.py gains a ('demo',) entry documenting the three modes, every flag, and --articulation; test_every_catalog_path_resolves covers ('demo',)",
+        "the explain entry names all three audiences mapped to modes (humans -> --play/--html, integrating developers -> showcase(), embedding code -> --json/showcase()); teken cli doctor . --strict stays green"
+      ],
+      "deps": [
+        "t6"
+      ],
+      "covers": [
+        "c2",
+        "h9",
+        "c12",
+        "h7"
+      ]
+    }
+  ],
+  "risks": []
+}
