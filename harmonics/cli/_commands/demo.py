@@ -38,6 +38,7 @@ dry-run listing are identical regardless of ``--articulation``.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from harmonics.cli._errors import EXIT_ENV_ERROR, CliError
@@ -80,10 +81,18 @@ def _format_text(clips: list[Clip]) -> str:
     return "\n".join(lines)
 
 
-def _play_live(clips: list[Clip], json_mode: bool) -> None:
+def _resolve_device(args: argparse.Namespace) -> str | None:
+    """The output device for ``--play``: the ``--device`` flag if given, else
+    ``$HARMONICS_AUDIO_DEVICE``, else ``None`` — in which case
+    :func:`harmonics.demo.play.play_clips` prefers a resampling sound-server
+    device (pipewire/pulse) before falling back to the backend's default."""
+    return args.device or os.environ.get("HARMONICS_AUDIO_DEVICE") or None
+
+
+def _play_live(clips: list[Clip], device: str | None, json_mode: bool) -> None:
     """``--play``: play every clip live. ``play_clips`` raises its own
     ``CliError`` when no backend is installed; that propagates unchanged."""
-    play_clips(clips)
+    play_clips(clips, device=device)
     if json_mode:
         emit_result({"played": len(clips)}, json_mode=True)
     else:
@@ -122,7 +131,7 @@ def cmd_demo(args: argparse.Namespace) -> int | None:
     clips = showcase(articulation=args.articulation)
 
     if args.play:
-        _play_live(clips, json_mode)
+        _play_live(clips, _resolve_device(args), json_mode)
         return None
 
     wrote = _write_requested_files(clips, args)
@@ -175,8 +184,18 @@ def register(sub: argparse._SubParsersAction) -> None:
         "--play",
         action="store_true",
         help=(
-            "Play every clip live via simpleaudio/sounddevice if installed "
-            "(else a friendly error)."
+            "Play every clip live (needs the audio extra: "
+            "uv tool install 'harmonics-cli[audio]'); else a friendly error."
+        ),
+    )
+    p.add_argument(
+        "--device",
+        default=None,
+        metavar="NAME|INDEX",
+        help=(
+            "Output device for --play (a name substring or index), e.g. "
+            "--device pipewire. Overrides $HARMONICS_AUDIO_DEVICE; the default "
+            "prefers a resampling sound-server device (pipewire/pulse)."
         ),
     )
     p.add_argument(

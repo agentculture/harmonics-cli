@@ -503,3 +503,60 @@ def test_explain_say_resolves(capsys: pytest.CaptureFixture[str]) -> None:
     assert rc == 0
     out = capsys.readouterr().out
     assert "# harmonics say" in out
+
+
+# --- --device / $HARMONICS_AUDIO_DEVICE resolution ---------------------------
+
+
+def _make_capture():
+    captured: dict[str, object] = {}
+
+    def fake_play(seq, *, articulation="discrete", device=None):
+        captured["seq"] = seq
+        captured["articulation"] = articulation
+        captured["device"] = device
+
+    return captured, fake_play
+
+
+def test_say_device_flag_is_passed_to_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured, fake_play = _make_capture()
+    monkeypatch.setattr("harmonics.audio.play", fake_play)
+
+    rc = main(["say", "all tests passed", "--play", "--device", "pipewire"])
+
+    assert rc == 0
+    assert captured["device"] == "pipewire"
+
+
+def test_say_device_env_var_used_when_no_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured, fake_play = _make_capture()
+    monkeypatch.setattr("harmonics.audio.play", fake_play)
+    monkeypatch.setenv("HARMONICS_AUDIO_DEVICE", "pulse")
+
+    rc = main(["say", "all tests passed", "--play"])
+
+    assert rc == 0
+    assert captured["device"] == "pulse"
+
+
+def test_say_device_flag_overrides_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured, fake_play = _make_capture()
+    monkeypatch.setattr("harmonics.audio.play", fake_play)
+    monkeypatch.setenv("HARMONICS_AUDIO_DEVICE", "pulse")
+
+    rc = main(["say", "all tests passed", "--play", "--device", "hw:1"])
+
+    assert rc == 0
+    assert captured["device"] == "hw:1"
+
+
+def test_say_device_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured, fake_play = _make_capture()
+    monkeypatch.setattr("harmonics.audio.play", fake_play)
+    monkeypatch.delenv("HARMONICS_AUDIO_DEVICE", raising=False)
+
+    rc = main(["say", "all tests passed", "--play"])
+
+    assert rc == 0
+    assert captured["device"] is None

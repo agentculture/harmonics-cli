@@ -166,6 +166,12 @@ must not hard-fail on a stray path argument. Keep these contracts intact.
   CLI core is cited from `teken` (`afi-cli`), not installed. Keep the pure
   text→notes core dependency-free and offline-testable; isolate optional audio
   I/O (playback, encoders) so importing the package never requires a sound stack.
+  Live playback (`--play` on `play`/`say`/`demo`) is opt-in via the
+  `harmonics-cli[audio]` extra (`sounddevice` + `numpy`), never a core
+  dependency; a `--device NAME|INDEX` flag / `$HARMONICS_AUDIO_DEVICE` env var
+  (flag wins) picks the output device, and with neither set, playback prefers a
+  resampling sound-server device (pipewire, then pulse) over the system default
+  sink.
 - **`.claude/skills/` is vendored cite-don't-import** from *guildmaster* (with a
   few tracked divergences). Do **not** hand-edit skill script bodies to "fix"
   them here; re-sync per `docs/skill-sources.md`. That file is the provenance

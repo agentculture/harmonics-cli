@@ -176,9 +176,20 @@ remediation hint instead of a silent no-op.
 - `--wav FILE` — renders and writes a real WAV audio file to `FILE`. No live
   device needed — this only touches the filesystem.
 - `--play` — renders and plays the gesture live through `simpleaudio` or
-  `sounddevice` (tried in that order, whichever is installed). If neither is
-  installed, fails with a structured `CliError` and a remediation hint to
-  install one or use `--wav`/`--out` instead.
+  `sounddevice` (tried in that order, whichever is installed). `sounddevice`
+  ships via the opt-in `harmonics-cli[audio]` extra (`uv tool install
+  'harmonics-cli[audio]'`, pulling in `sounddevice` + `numpy`), so the core
+  install stays dependency-free. If neither backend is installed, fails with
+  a structured `CliError` and a remediation hint to install one or use
+  `--wav`/`--out` instead.
+- `--device NAME|INDEX` — selects the output device for `--play` (a name
+  substring or index, e.g. `--device pipewire`). Falls back to
+  `$HARMONICS_AUDIO_DEVICE` when unset (the flag wins over the env var); with
+  neither given, prefers a resampling sound-server device (pipewire, then
+  pulse) so playback still works when the system default sink is a
+  fixed-rate device. A device failure emits a friendly environment error
+  (exit `2`) listing available output devices and pointing at
+  `--device`/`--wav`, instead of a generic crash.
 
 ## `--articulation` — how the voice moves between notes
 
@@ -270,9 +281,20 @@ instead of a silent no-op.
   device needed — this only touches the filesystem.
 - `--play` — renders and plays the utterance live through `simpleaudio` or
   `sounddevice` (tried in that order, whichever is installed); takes
-  priority over `--out`/`--midi`/`--wav` if given alongside them. If neither
-  library is installed, fails with a structured `CliError` and a
-  remediation hint to install one or use `--wav`/`--out`/`--midi` instead.
+  priority over `--out`/`--midi`/`--wav` if given alongside them.
+  `sounddevice` ships via the opt-in `harmonics-cli[audio]` extra (`uv tool
+  install 'harmonics-cli[audio]'`, pulling in `sounddevice` + `numpy`), so
+  the core install stays dependency-free. If neither library is installed,
+  fails with a structured `CliError` and a remediation hint to install one
+  or use `--wav`/`--out`/`--midi` instead.
+- `--device NAME|INDEX` — selects the output device for `--play` (a name
+  substring or index, e.g. `--device pipewire`). Falls back to
+  `$HARMONICS_AUDIO_DEVICE` when unset (the flag wins over the env var); with
+  neither given, prefers a resampling sound-server device (pipewire, then
+  pulse) so playback still works when the system default sink is a
+  fixed-rate device. A device failure emits a friendly environment error
+  (exit `2`) listing available output devices and pointing at
+  `--device`/`--wav` instead of a generic crash.
 
 ## `--articulation` — how the voice moves between notes
 
@@ -327,9 +349,19 @@ each with the mode built for them.
 
 - `--play` — play every clip live via `simpleaudio`/`sounddevice` (tried in
   that order, whichever is installed); takes priority over every file flag
-  below if given alongside them. If neither library is installed, fails
-  with a structured `CliError` and a remediation hint instead of a silent
-  no-op.
+  below if given alongside them. `sounddevice` ships via the opt-in
+  `harmonics-cli[audio]` extra (`uv tool install 'harmonics-cli[audio]'`,
+  pulling in `sounddevice` + `numpy`), so the core install stays
+  dependency-free. If neither library is installed, fails with a structured
+  `CliError` and a remediation hint instead of a silent no-op.
+- `--device NAME|INDEX` — selects the output device for `--play` (a name
+  substring or index, e.g. `--device pipewire`). Falls back to
+  `$HARMONICS_AUDIO_DEVICE` when unset (the flag wins over the env var); with
+  neither given, prefers a resampling sound-server device (pipewire, then
+  pulse) so playback still works when the system default sink is a
+  fixed-rate device. A device failure emits a friendly environment error
+  (exit `2`) listing available output devices and pointing at
+  `--device`/`--wav` instead of a generic crash.
 - `--html FILE` — write a self-contained, browser-playable HTML gallery to
   FILE.
 - `--wav DIR` — write one WAV file per clip into DIR (created if missing).

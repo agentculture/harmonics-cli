@@ -15,11 +15,13 @@ Two hard rules from ``CLAUDE.md``'s design spine:
 * audio-PRODUCING actions require an explicit flag; the only function here
   that touches a real device, :func:`play`, isolates its optional playback
   library behind a **lazy, in-function** import (tried in order:
-  ``simpleaudio``, then ``sounddevice``) so importing :mod:`harmonics.audio`
-  itself never requires a sound stack. If neither library is importable,
-  :func:`play` raises the same structured :class:`~harmonics.cli._errors.
-  CliError` every other verb failure uses, rather than a bare
-  ``ImportError`` or a silent no-op.
+  ``sounddevice``, then ``simpleaudio``) so importing :mod:`harmonics.audio`
+  itself never requires a sound stack. ``sounddevice`` is preferred because it
+  is the only backend that honors ``--device`` / the pipewire-default output
+  selection (``simpleaudio`` has no device API); ``simpleaudio`` is a lighter
+  fallback. If neither library is importable, :func:`play` raises the same
+  structured :class:`~harmonics.cli._errors.CliError` every other verb failure
+  uses, rather than a bare ``ImportError`` or a silent no-op.
 
 Articulation — how the voice MOVES between notes
 --------------------------------------------------
@@ -81,6 +83,7 @@ from array import array
 from pathlib import Path
 from typing import Sequence
 
+from harmonics.audio._playback import device_playback_error, select_output_device
 from harmonics.cli._errors import EXIT_ENV_ERROR, CliError
 from harmonics.notes import NoteEvent
 
@@ -445,34 +448,35 @@ def play(
     *,
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     articulation: str = "discrete",
+    device: int | str | None = None,
 ) -> None:
     """Render ``seq`` and play it through a live playback backend.
 
-    Tries an optional playback library, in order: ``simpleaudio``, then
-    ``sounddevice`` — both imported LAZILY, right here, so importing
+    Tries an optional playback library, in order: ``sounddevice``, then
+    ``simpleaudio`` — both imported LAZILY, right here, so importing
     :mod:`harmonics.audio` (or calling :func:`render_wav`/:func:`write_wav`)
-    never requires either to be installed. If neither is importable, raises
-    the project's structured :class:`~harmonics.cli._errors.CliError`
-    (exit code :data:`~harmonics.cli._errors.EXIT_ENV_ERROR`) with a
-    remediation hint, instead of letting a bare ``ImportError`` (or a
-    silent no-op) reach the caller.
+    never requires either to be installed. ``sounddevice`` is preferred
+    because it is the only backend that honors ``device`` (and the
+    pipewire/pulse auto-preference); ``simpleaudio`` is a lighter fallback for
+    an environment that only has it.
+
+    ``device`` selects the output device for the ``sounddevice`` backend (an
+    index or a name substring, e.g. ``"pipewire"``); with ``device=None`` a
+    resampling sound-server device is preferred when present so playback works
+    on a host whose default sink is fixed-rate — see
+    :func:`~harmonics.audio._playback.select_output_device`. (``simpleaudio``
+    has no device-selection API, so ``device`` is silently ignored on that
+    fallback backend; that only happens when ``sounddevice`` is unavailable.)
+
+    Raises the project's structured :class:`~harmonics.cli._errors.CliError`
+    (exit :data:`~harmonics.cli._errors.EXIT_ENV_ERROR`) in two cases, rather
+    than letting a bare ``ImportError``, a device ``PortAudioError``, or a
+    silent no-op reach the caller: (1) neither backend is importable, and
+    (2) a backend is present but the device fails to play (bad sample rate,
+    busy device, …) — see
+    :func:`~harmonics.audio._playback.device_playback_error`.
     """
     data = render_wav(seq, sample_rate=sample_rate, articulation=articulation)
-
-    try:
-        import simpleaudio  # type: ignore[import-not-found]
-    except ImportError:
-        simpleaudio = None  # type: ignore[assignment]
-
-    if simpleaudio is not None:
-        with wave.open(io.BytesIO(data), "rb") as wf:
-            frames = wf.readframes(wf.getnframes())
-            channels = wf.getnchannels()
-            sampwidth = wf.getsampwidth()
-            framerate = wf.getframerate()
-        play_obj = simpleaudio.WaveObject(frames, channels, sampwidth, framerate).play()
-        play_obj.wait_done()
-        return
 
     try:
         import sounddevice  # type: ignore[import-not-found]
@@ -497,12 +501,45 @@ def play(
         samples.frombytes(frames)
         if sys.byteorder == "big":
             samples.byteswap()
-        sounddevice.play(samples, framerate)
-        sounddevice.wait()
+        target = select_output_device(sounddevice, device)
+        # Only pass device= when one was actually resolved, so a backend (or a
+        # test double) with no device-selection support still plays on the
+        # default device.
+        play_kwargs = {} if target is None else {"device": target}
+        try:
+            sounddevice.play(samples, framerate, **play_kwargs)
+            sounddevice.wait()
+        except Exception as exc:  # noqa: BLE001 - any device failure -> friendly CliError
+            raise device_playback_error(sounddevice, exc, framerate) from exc
+        return
+
+    try:
+        import simpleaudio  # type: ignore[import-not-found]
+    except ImportError:
+        simpleaudio = None  # type: ignore[assignment]
+
+    if simpleaudio is not None:
+        with wave.open(io.BytesIO(data), "rb") as wf:
+            frames = wf.readframes(wf.getnframes())
+            channels = wf.getnchannels()
+            sampwidth = wf.getsampwidth()
+            framerate = wf.getframerate()
+        # simpleaudio (the fallback) has no device-selection API, so ``device``
+        # cannot be honored here; a device failure is still converted to the
+        # structured CliError contract rather than a bare traceback.
+        try:
+            play_obj = simpleaudio.WaveObject(frames, channels, sampwidth, framerate).play()
+            play_obj.wait_done()
+        except Exception as exc:  # noqa: BLE001 - any device failure -> friendly CliError
+            raise device_playback_error(None, exc, framerate) from exc
         return
 
     raise CliError(
         code=EXIT_ENV_ERROR,
         message="no audio playback backend is installed",
-        remediation="install 'simpleaudio' or 'sounddevice', or use --wav to write a file",
+        remediation=(
+            "install the audio extra: uv tool install 'harmonics-cli[audio]' "
+            "(pulls in sounddevice), or hand-install 'simpleaudio'; "
+            "or use --wav to write a file instead"
+        ),
     )

@@ -27,10 +27,11 @@ actual WAV file (:mod:`harmonics.audio`) — neither needs a live audio device,
 and either raises a structured :class:`~harmonics.cli._errors.CliError` (not a
 bare traceback) if the write itself fails, e.g. a missing parent directory.
 ``--play`` renders the gesture and plays it via a live backend
-(:func:`harmonics.audio.play`, tried in order: ``simpleaudio``, then
-``sounddevice``) if either is installed; with neither installed it fails
+(:func:`harmonics.audio.play`, tried in order: ``sounddevice``, then
+``simpleaudio``) if either is installed; with neither installed it fails
 loudly with a friendly ``CliError`` hint rather than silently no-op'ing — use
 ``--wav`` instead when you just want a file and no device at all.
+``--device`` picks which output device ``--play`` opens (see its flag help).
 
 ``--articulation`` (default ``"smooth"``) selects HOW ``--wav``/``--play``
 synthesize the gesture — a continuous gliding voice by default, or the
@@ -41,6 +42,7 @@ note sequence itself; see :mod:`harmonics.audio.synth` for the four styles.
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from harmonics.axes import CONFIDENCES, INTENTS, STATES, URGENCIES, Axes
@@ -116,7 +118,17 @@ def _raise_articulation_error(articulation: str, err: ValueError) -> None:
     ) from err
 
 
-def _play_live(notes: list[NoteEvent], articulation: str, json_mode: bool) -> None:
+def _resolve_device(args: argparse.Namespace) -> str | None:
+    """The output device for ``--play``: the ``--device`` flag if given, else
+    ``$HARMONICS_AUDIO_DEVICE``, else ``None`` — in which case
+    :func:`harmonics.audio.play` prefers a resampling sound-server device
+    (pipewire/pulse) before falling back to the backend's own default."""
+    return args.device or os.environ.get("HARMONICS_AUDIO_DEVICE") or None
+
+
+def _play_live(
+    notes: list[NoteEvent], articulation: str, device: str | None, json_mode: bool
+) -> None:
     """``--play``: render and play ``notes`` through a live backend."""
     # Lazy import: harmonics.audio's own optional playback backend is
     # isolated behind this call, so importing this module (and every other
@@ -126,7 +138,7 @@ def _play_live(notes: list[NoteEvent], articulation: str, json_mode: bool) -> No
     from harmonics.audio import play as play_audio
 
     try:
-        play_audio(notes, articulation=articulation)
+        play_audio(notes, articulation=articulation, device=device)
     except ValueError as err:
         _raise_articulation_error(articulation, err)
     if json_mode:
@@ -175,7 +187,7 @@ def _emit(notes: list[NoteEvent], args: argparse.Namespace, json_mode: bool) -> 
     """Dispatch to the right output path: ``--play`` > ``--wav`` > ``--out`` >
     the dry-run default — mirrors the priority documented on each flag."""
     if args.play:
-        _play_live(notes, args.articulation, json_mode)
+        _play_live(notes, args.articulation, _resolve_device(args), json_mode)
     elif args.wav:
         _write_wav_file(notes, args.wav, args.articulation, json_mode)
     elif args.out:
@@ -258,9 +270,20 @@ def register(sub: argparse._SubParsersAction) -> None:
         "--play",
         action="store_true",
         help=(
-            "Render and play audio live via 'simpleaudio' or 'sounddevice' if "
-            "installed; otherwise fails with a friendly error (use --wav to "
-            "capture to a file with no device)."
+            "Render and play audio live (needs the audio extra: "
+            "uv tool install 'harmonics-cli[audio]'); otherwise fails with a "
+            "friendly error (use --wav to capture to a file with no device)."
+        ),
+    )
+    p.add_argument(
+        "--device",
+        default=None,
+        metavar="NAME|INDEX",
+        help=(
+            "Output device for --play (a name substring or index), e.g. "
+            "--device pipewire. Overrides $HARMONICS_AUDIO_DEVICE; the default "
+            "prefers a resampling sound-server device (pipewire/pulse) so "
+            "playback works when the system default sink is a fixed-rate one."
         ),
     )
     p.add_argument(

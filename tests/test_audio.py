@@ -157,6 +157,7 @@ def test_play_threads_articulation_through_to_render(monkeypatch: pytest.MonkeyP
     fake_module = type(sys)("simpleaudio")
     fake_module.WaveObject = _FakeWaveObject  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     seq = _seq()
     play(seq, articulation="alien")
@@ -250,10 +251,13 @@ class _FakeWaveObject:
         return obj
 
 
-def test_play_uses_simpleaudio_when_available(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_play_uses_simpleaudio_when_sounddevice_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``simpleaudio`` is only the fallback backend: it is used here because
+    ``sounddevice`` is unavailable, not because it is preferred."""
     fake_module = type(sys)("simpleaudio")
     fake_module.WaveObject = _FakeWaveObject  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
 
     seq = _seq()
     play(seq)
@@ -284,9 +288,11 @@ class _FakeSoundDevice:
         self.waited = True
 
 
-def test_play_falls_back_to_sounddevice_when_simpleaudio_absent(
+def test_play_uses_sounddevice_when_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """``sounddevice`` is the preferred backend now: it is used whenever it is
+    importable, even with no ``simpleaudio`` fallback in play."""
     monkeypatch.setitem(sys.modules, "simpleaudio", None)
     fake_sd = _FakeSoundDevice()
     monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
@@ -299,6 +305,38 @@ def test_play_falls_back_to_sounddevice_when_simpleaudio_absent(
     assert samplerate == DEFAULT_SAMPLE_RATE
     assert len(samples) > 0
     assert fake_sd.waited is True
+
+
+def test_play_prefers_sounddevice_over_simpleaudio_when_both_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for the reorder: when BOTH backends are importable,
+    ``sounddevice`` must be chosen (and ``--device`` honored) rather than
+    ``simpleaudio`` silently winning and ignoring ``device``."""
+    simpleaudio_calls: list[tuple] = []
+
+    class _FakeWaveObjectRecording:
+        def __init__(
+            self, audio_data: bytes, num_channels: int, bytes_per_sample: int, sample_rate: int
+        ) -> None:
+            simpleaudio_calls.append((audio_data, num_channels, bytes_per_sample, sample_rate))
+
+        def play(self) -> _FakePlayObj:
+            return _FakePlayObj()
+
+    fake_simpleaudio = type(sys)("simpleaudio")
+    fake_simpleaudio.WaveObject = _FakeWaveObjectRecording  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "simpleaudio", fake_simpleaudio)
+
+    fake_sd = _FakeSoundDeviceWithDevices([{"name": "pipewire", "max_output_channels": 64}])
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    play(_seq(), device="pipewire")
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == "pipewire"
+    assert fake_sd.waited is True
+    assert simpleaudio_calls == []
 
 
 # --- play(): sounddevice path decodes correctly on a big-endian host --------
@@ -345,3 +383,164 @@ def test_play_sounddevice_byteswaps_samples_on_big_endian_host(
     samples, samplerate = fake_sd.played
     assert samplerate == DEFAULT_SAMPLE_RATE
     assert tuple(samples) == expected
+
+
+# --- play(): output-device selection (auto-select, explicit override) -------
+
+
+class _FakeSoundDeviceWithDevices:
+    """Fake sounddevice exposing ``query_devices()`` so
+    :func:`~harmonics.audio._playback.select_output_device`'s auto-selection
+    logic can be exercised, and a ``play()`` that records the resolved
+    ``device=`` kwarg (unlike :class:`_FakeSoundDevice` above, which has no
+    device-selection support at all)."""
+
+    def __init__(self, devices: list[dict]) -> None:
+        self.devices = devices
+        self.played: tuple | None = None
+        self.device: int | str | None = None
+        self.waited = False
+
+    def query_devices(self) -> list[dict]:
+        return self.devices
+
+    def play(self, samples, samplerate, device=None) -> None:  # noqa: ANN001
+        self.played = (samples, samplerate)
+        self.device = device
+
+    def wait(self) -> None:
+        self.waited = True
+
+
+class _FakeSoundDeviceRaisingOnPlay:
+    """Fake sounddevice whose ``play()`` always raises, to exercise the
+    friendly ``CliError`` conversion for a real device failure (e.g. a
+    PortAudioError for a sample rate the device can't accept)."""
+
+    def __init__(self, devices: list[dict] | None = None) -> None:
+        self.devices = devices if devices is not None else []
+
+    def query_devices(self) -> list[dict]:
+        return self.devices
+
+    def play(self, samples, samplerate, device=None) -> None:  # noqa: ANN001
+        raise RuntimeError("Invalid sample rate")
+
+    def wait(self) -> None:  # pragma: no cover - never reached, play() raises first
+        pass
+
+
+def test_play_auto_selects_pipewire_device_when_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Prefers pipewire even when a non-pipewire output device sorts earlier
+    in ``query_devices()``."""
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    devices = [
+        {"name": "HDA default", "max_output_channels": 2},
+        {"name": "pipewire", "max_output_channels": 64},
+        {"name": "some input", "max_output_channels": 0},
+    ]
+    fake_sd = _FakeSoundDeviceWithDevices(devices)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    play(_seq())
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == 1
+
+
+def test_play_auto_selects_pulse_device_when_no_pipewire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    devices = [
+        {"name": "HDA default", "max_output_channels": 2},
+        {"name": "pulse", "max_output_channels": 32},
+    ]
+    fake_sd = _FakeSoundDeviceWithDevices(devices)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    play(_seq())
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == 1
+
+
+def test_play_explicit_device_string_bypasses_auto_select(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    devices = [{"name": "pipewire", "max_output_channels": 64}]
+    fake_sd = _FakeSoundDeviceWithDevices(devices)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    play(_seq(), device="hw:CARD=X")
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == "hw:CARD=X"
+
+
+def test_play_explicit_digit_string_device_forwarded_as_int(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    fake_sd = _FakeSoundDeviceWithDevices([])
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    play(_seq(), device="3")
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == 3
+    assert isinstance(fake_sd.device, int)
+
+
+# --- play(): a live device failure surfaces the friendly CliError -----------
+
+
+def test_play_sounddevice_failure_raises_friendly_cli_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    fake_sd = _FakeSoundDeviceRaisingOnPlay([])
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    with pytest.raises(CliError) as exc:
+        play(_seq())
+
+    assert exc.value.code == EXIT_ENV_ERROR
+    assert exc.value.message.startswith("audio playback failed:")
+    assert "--device" in exc.value.remediation
+    assert "--wav" in exc.value.remediation
+
+
+class _FakeWaveObjectRaisingOnPlay:
+    """Stand-in for ``simpleaudio.WaveObject`` whose ``play()`` always
+    raises, to exercise the friendly ``CliError`` conversion on the
+    simpleaudio branch (mirrors :class:`_FakeSoundDeviceRaisingOnPlay` above
+    for the sounddevice branch)."""
+
+    def __init__(
+        self, audio_data: bytes, num_channels: int, bytes_per_sample: int, sample_rate: int
+    ) -> None:
+        pass
+
+    def play(self):
+        raise RuntimeError("device busy")
+
+
+def test_play_simpleaudio_failure_raises_friendly_cli_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = type(sys)("simpleaudio")
+    fake_module.WaveObject = _FakeWaveObjectRaisingOnPlay  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+    monkeypatch.setitem(sys.modules, "sounddevice", None)
+
+    with pytest.raises(CliError) as exc:
+        play(_seq())
+
+    assert exc.value.code == EXIT_ENV_ERROR
+    assert exc.value.message.startswith("audio playback failed:")
+    assert "--device" in exc.value.remediation
+    assert "--wav" in exc.value.remediation
