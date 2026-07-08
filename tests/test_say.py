@@ -294,6 +294,80 @@ def test_say_play_takes_priority_over_out(
     assert not target.exists()
 
 
+# --- write-failure -> structured CliError, not a traceback (qodo #2) ---------
+
+
+def test_say_out_write_failure_exits_2_structured(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--out`` to a path whose parent directory doesn't exist must raise a
+    ``CliError`` (exit 2, ``error:``/``hint:``), never a bare traceback."""
+    target = tmp_path / "no-such-dir" / "utterance.json"
+    rc = main(["say", "all tests passed", "--out", str(target)])
+    assert rc == 2
+    assert not target.exists()
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+    assert str(target) in err
+
+
+def test_say_midi_write_failure_exits_2_structured(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--midi`` to a path whose parent directory doesn't exist must raise a
+    ``CliError`` (exit 2, ``error:``/``hint:``), never a bare traceback."""
+    target = tmp_path / "no-such-dir" / "utterance.midi.json"
+    rc = main(["say", "all tests passed", "--midi", str(target)])
+    assert rc == 2
+    assert not target.exists()
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+    assert str(target) in err
+
+
+def test_say_wav_write_failure_exits_2_structured(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--wav`` to a path whose parent directory doesn't exist must raise a
+    ``CliError`` (exit 2, ``error:``/``hint:``), never a bare traceback."""
+    target = tmp_path / "no-such-dir" / "utterance.wav"
+    rc = main(["say", "all tests passed", "--wav", str(target)])
+    assert rc == 2
+    assert not target.exists()
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+    assert str(target) in err
+
+
+def test_say_out_write_failure_does_not_also_write_midi_or_wav(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--out`` is written first in ``_write_requested_files``; if it fails,
+    the CliError propagates immediately and ``--midi``/``--wav`` never run."""
+    bad_out = tmp_path / "no-such-dir" / "utterance.json"
+    midi_target = tmp_path / "utterance.midi.json"
+    wav_target = tmp_path / "utterance.wav"
+    rc = main(
+        [
+            "say",
+            "all tests passed",
+            "--out",
+            str(bad_out),
+            "--midi",
+            str(midi_target),
+            "--wav",
+            str(wav_target),
+        ]
+    )
+    assert rc == 2
+    assert not bad_out.exists()
+    assert not midi_target.exists()
+    assert not wav_target.exists()
+
+
 # --- explain (criterion 7) ----------------------------------------------------
 
 

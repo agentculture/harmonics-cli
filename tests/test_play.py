@@ -184,6 +184,39 @@ def test_play_flag_with_no_backend_installed(capsys: pytest.CaptureFixture[str])
     assert "sounddevice" in err
 
 
+# --- write-failure -> structured CliError, not a traceback (qodo #2) ---------
+
+
+def test_play_out_write_failure_exits_2_structured(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--out`` to a path whose parent directory doesn't exist must raise a
+    ``CliError`` (exit 2, ``error:``/``hint:``), never a bare traceback."""
+    target = tmp_path / "no-such-dir" / "gesture.json"
+    rc = main(["play", "--intent", "success", "--out", str(target)])
+    assert rc == 2
+    assert not target.exists()
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+    assert str(target) in err
+
+
+def test_play_wav_write_failure_exits_2_structured(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--wav`` to a path whose parent directory doesn't exist must raise a
+    ``CliError`` (exit 2, ``error:``/``hint:``), never a bare traceback."""
+    target = tmp_path / "no-such-dir" / "gesture.wav"
+    rc = main(["play", "--intent", "success", "--wav", str(target)])
+    assert rc == 2
+    assert not target.exists()
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+    assert str(target) in err
+
+
 # --- explain (criterion 6) --------------------------------------------------
 
 
