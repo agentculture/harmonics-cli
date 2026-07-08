@@ -12,6 +12,7 @@ never requires a third-party or audio-device module.
 from __future__ import annotations
 
 import io
+import struct
 import sys
 import wave
 
@@ -204,3 +205,49 @@ def test_play_falls_back_to_sounddevice_when_simpleaudio_absent(
     assert samplerate == DEFAULT_SAMPLE_RATE
     assert len(samples) > 0
     assert fake_sd.waited is True
+
+
+# --- play(): sounddevice path decodes correctly on a big-endian host --------
+
+
+def test_play_sounddevice_byteswaps_samples_on_big_endian_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sounddevice branch must undo ``_quantize``'s little-endian
+    encoding on a big-endian host, or every sample is misread.
+
+    ``_quantize`` always emits little-endian 16-bit PCM (it byteswaps its own
+    native storage when ``sys.byteorder == "big"`` so the WAV bytes stay
+    portable). ``array.frombytes`` has no notion of byte order of its own —
+    it blits raw bytes into the array's native storage — so reading those
+    always-LE frames back on a real big-endian host silently misinterprets
+    every value unless the same byteswap is undone on the way in.
+
+    Byteswapping is self-inverse, so forcing ``sys.byteorder`` to ``"big"``
+    here exercises both legs (the encode in ``_quantize`` and the decode
+    fix in ``play``) symmetrically and round-trips to the correct sample
+    values on ANY real host -- this test is honest whether the runner is
+    genuinely little- or big-endian.
+    """
+    seq = _seq()
+
+    # Ground truth: obtained *before* any byteorder patching, so this
+    # reflects this real host's genuinely-correct render — and the WAV
+    # format is always little-endian PCM, so decoding with an explicit "<h"
+    # struct format gives the true sample values on any host.
+    with wave.open(io.BytesIO(render_wav(seq)), "rb") as wf:
+        n = wf.getnframes()
+        reference_frames = wf.readframes(n)
+    expected = struct.unpack(f"<{n}h", reference_frames)
+
+    monkeypatch.setattr(sys, "byteorder", "big")
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    fake_sd = _FakeSoundDevice()
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    play(seq)
+
+    assert fake_sd.played is not None
+    samples, samplerate = fake_sd.played
+    assert samplerate == DEFAULT_SAMPLE_RATE
+    assert tuple(samples) == expected
