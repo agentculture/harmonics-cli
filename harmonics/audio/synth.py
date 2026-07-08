@@ -257,10 +257,13 @@ ARTICULATIONS: dict[str, dict[str, float] | None] = {
 
 
 def _smoothstep(x: float) -> float:
-    if x <= 0:
-        return 0.0
-    if x >= 1:
-        return 1.0
+    """Cubic Hermite smoothstep (``3x^2 - 2x^3``), clamped to ``[0, 1]``.
+
+    Clamping ``x`` up front (rather than early-returning the endpoints) keeps
+    the result identical for every input while giving the analyzer a single,
+    unconditional expression to reason about.
+    """
+    x = min(1.0, max(0.0, x))
     return x * x * (3 - 2 * x)
 
 
@@ -292,6 +295,35 @@ def _glide_quantize(mix: array) -> bytes:
     if sys.byteorder == "big":  # pragma: no cover - WAV PCM is little-endian
         out.byteswap()
     return out.tobytes()
+
+
+def _glide_pitch_and_amp(
+    seg: int,
+    t: float,
+    onsets: list[float],
+    pitches: list[float],
+    vels: list[float],
+    glide_frac: float,
+) -> tuple[float, float]:
+    """Pitch (MIDI, possibly fractional) and base amplitude at time ``t``.
+
+    Holds note ``seg``, then glides to the next pitch over ``glide_frac`` of
+    the inter-onset gap, arriving at the next onset; the final note simply
+    holds. Factored out of :func:`_render_glide`'s sample loop so that loop
+    stays simple; the arithmetic (and thus the output bytes) is unchanged.
+    """
+    if seg + 1 >= len(onsets):
+        return pitches[seg], vels[seg]
+    t0, t1 = onsets[seg], onsets[seg + 1]
+    interval = max(1e-6, t1 - t0)
+    glide_time = glide_frac * interval
+    gstart = t1 - glide_time
+    if t < gstart:
+        return pitches[seg], vels[seg]
+    f = _smoothstep((t - gstart) / max(1e-6, glide_time))
+    pitch = pitches[seg] + (pitches[seg + 1] - pitches[seg]) * f
+    amp_base = vels[seg] + (vels[seg + 1] - vels[seg]) * f
+    return pitch, amp_base
 
 
 def _render_glide(
@@ -338,21 +370,7 @@ def _render_glide(
             seg += 1
 
         # ---- pitch: hold this note, then glide to the next near its onset ----
-        if seg + 1 < len(onsets):
-            t0, t1 = onsets[seg], onsets[seg + 1]
-            interval = max(1e-6, t1 - t0)
-            glide_time = glide_frac * interval
-            gstart = t1 - glide_time
-            if t < gstart:
-                pitch = pitches[seg]
-                amp_base = vels[seg]
-            else:
-                f = _smoothstep((t - gstart) / max(1e-6, glide_time))
-                pitch = pitches[seg] + (pitches[seg + 1] - pitches[seg]) * f
-                amp_base = vels[seg] + (vels[seg + 1] - vels[seg]) * f
-        else:
-            pitch = pitches[seg]
-            amp_base = vels[seg]
+        pitch, amp_base = _glide_pitch_and_amp(seg, t, onsets, pitches, vels, glide_frac)
 
         # ---- vibrato + frequency ----
         vib = 2.0 ** ((vibrato_cents / 1200.0) * sin(_TWO_PI * vibrato_hz * t))
