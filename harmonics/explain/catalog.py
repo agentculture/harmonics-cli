@@ -38,13 +38,12 @@ Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 - `harmonics explain <path>` — markdown docs for any noun/verb.
 - `harmonics overview` — descriptive snapshot of the agent.
 - `harmonics doctor` — check the agent-identity invariants.
-- `harmonics play` — render explicit axes to a note sequence (dry-run default).
+- `harmonics play` — render explicit axes to a note sequence (dry-run
+  default; `--wav` for an offline WAV file, `--play` for live audio).
 - `harmonics say "<sentence>"` — sentence → inferred axes + text contour +
-  emphasis → notes, in the agent's voice (dry-run default).
+  emphasis → notes, in the agent's voice (dry-run default; `--wav` for an
+  offline WAV file, `--play` for live audio).
 - `harmonics cli overview` — describe the CLI surface.
-
-Coming: real `--play` audio playback (`play`/`say` today render notes only;
-sound output is a later increment).
 
 ## Exit-code policy
 
@@ -131,8 +130,14 @@ design spine in `CLAUDE.md` and the build brief, issue #1). Composes
 signature), and `harmonics.mapping` (axes → notes), plus an optional
 deterministic micro-variation pass (`harmonics.variation`) via `--seq`.
 
-**Dry-run by default** — with no `--out`/`--play`, this only prints the note
-sequence: no file is written, no sound is made. Safe to call in a loop.
+**Dry-run by default** — with no `--out`/`--wav`/`--play`, this only prints
+the note sequence: no file is written, no sound is made. Safe to call in a
+loop. `--wav FILE` renders and writes a real WAV file (`harmonics.audio`)
+with no live device needed. `--play` renders and plays it live through
+`simpleaudio` or `sounddevice` (tried in that order, whichever is
+installed) and takes priority over `--out`/`--wav` if given alongside them;
+if neither library is installed it fails with a structured `CliError` and a
+remediation hint instead of a silent no-op.
 
 ## Axes
 
@@ -154,6 +159,8 @@ sequence: no file is written, no sound is made. Safe to call in a loop.
     harmonics play --intent success --json
     harmonics play --intent success --seq 7
     harmonics play --intent success --out gesture.json
+    harmonics play --intent success --wav gesture.wav
+    harmonics play --intent success --play
 
 ## Output modes
 
@@ -162,8 +169,12 @@ sequence: no file is written, no sound is made. Safe to call in a loop.
   with `--json`. Writes no file, makes no sound.
 - `--out FILE` — writes the note-sequence JSON to `FILE`; prints a one-line
   confirmation. No audio backend required.
-- `--play` — not available yet (the audio backend is a later increment);
-  exits with a friendly hint to use `--out` or `--json` instead.
+- `--wav FILE` — renders and writes a real WAV audio file to `FILE`. No live
+  device needed — this only touches the filesystem.
+- `--play` — renders and plays the gesture live through `simpleaudio` or
+  `sounddevice` (tried in that order, whichever is installed). If neither is
+  installed, fails with a structured `CliError` and a remediation hint to
+  install one or use `--wav`/`--out` instead.
 """
 
 _SAY = """\
@@ -193,9 +204,15 @@ composes the full pipeline:
 7. `harmonics.variation.apply_variation` adds an optional deterministic
    micro-variation pass via `--seq`.
 
-**Dry-run by default** — with no `--out`/`--midi`/`--play`, this only prints
-the note sequence: no file is written, no sound is made. Safe to call in a
-loop.
+**Dry-run by default** — with no `--out`/`--midi`/`--wav`/`--play`, this only
+prints the note sequence: no file is written, no sound is made. Safe to call
+in a loop. `--wav FILE` renders and writes a real WAV file
+(`harmonics.audio`) with no live device needed. `--play` renders and plays
+the utterance live through `simpleaudio` or `sounddevice` (tried in that
+order, whichever is installed) and takes priority over
+`--out`/`--midi`/`--wav` if given alongside them; if neither library is
+installed it fails with a structured `CliError` and a remediation hint
+instead of a silent no-op.
 
 ## Flags
 
@@ -214,6 +231,8 @@ loop.
     harmonics say "wrap it up, no rush" --seq 7
     harmonics say "all tests passed" --out utterance.json
     harmonics say "all tests passed" --midi utterance.midi.json
+    harmonics say "all tests passed" --wav utterance.wav
+    harmonics say "all tests passed" --play
 
 ## Output modes
 
@@ -224,8 +243,13 @@ loop.
 - `--midi FILE` — writes the MIDI-like tick representation
   (`harmonics.notes.to_midi_notes`) to `FILE`. No audio backend required for
   either.
-- `--play` — not available yet (the audio backend is a later increment);
-  exits with a friendly hint to use `--out`/`--midi` or `--json` instead.
+- `--wav FILE` — renders and writes a real WAV audio file to `FILE`. No live
+  device needed — this only touches the filesystem.
+- `--play` — renders and plays the utterance live through `simpleaudio` or
+  `sounddevice` (tried in that order, whichever is installed); takes
+  priority over `--out`/`--midi`/`--wav` if given alongside them. If neither
+  library is installed, fails with a structured `CliError` and a
+  remediation hint to install one or use `--wav`/`--out`/`--midi` instead.
 """
 
 _CLI = """\

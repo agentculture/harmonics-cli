@@ -233,7 +233,18 @@ def play(seq: Sequence[NoteEvent], *, sample_rate: int = DEFAULT_SAMPLE_RATE) ->
             frames = wf.readframes(wf.getnframes())
             framerate = wf.getframerate()
         samples = array("h")
+        # ``frames`` is always little-endian 16-bit PCM (the WAV format's
+        # required byte order, guaranteed by :func:`_quantize` regardless of
+        # host endianness). ``array.frombytes`` has no notion of byte order
+        # of its own — it copies the raw bytes and interprets them using the
+        # HOST's native order. On a little-endian host that's a no-op; on a
+        # big-endian host it silently misreads every sample. So, mirroring
+        # ``_quantize``'s own correction, byteswap back on a big-endian host
+        # to undo that misinterpretation before handing samples to the
+        # device.
         samples.frombytes(frames)
+        if sys.byteorder == "big":
+            samples.byteswap()
         sounddevice.play(samples, framerate)
         sounddevice.wait()
         return
