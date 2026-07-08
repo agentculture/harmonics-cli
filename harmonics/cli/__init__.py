@@ -63,6 +63,7 @@ def _argv_has_json(argv: list[str] | None) -> bool:
 
 def _build_parser() -> argparse.ArgumentParser:
     from harmonics.cli._commands import cli as _cli_group
+    from harmonics.cli._commands import demo as _demo_cmd
     from harmonics.cli._commands import doctor as _doctor_cmd
     from harmonics.cli._commands import explain as _explain_cmd
     from harmonics.cli._commands import learn as _learn_cmd
@@ -95,6 +96,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _doctor_cmd.register(sub)
     _play_cmd.register(sub)
     _say_cmd.register(sub)
+    _demo_cmd.register(sub)
     _cli_group.register(sub)
     # Register your own noun groups here:
     #   from harmonics.cli._commands import my_noun as _my_noun_group

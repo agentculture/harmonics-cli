@@ -38,16 +38,19 @@ phonemes, only meaning.
 
 ## Status
 
-Scaffold today: the agent-first CLI, mesh identity, skill kit, and CI baseline
-are in place; the audio domain is being built. The pure text→notes core is
-designed to stay dependency-free and offline-testable — tests assert on note
-sequences, not on a speaker. Coming text-to-notes verbs:
+The agent-first CLI, mesh identity, skill kit, and CI baseline are in place, and
+the **voice domain has shipped**. The pure text→notes core stays dependency-free
+and offline-testable — tests assert on note sequences, not on a speaker. The
+text-to-notes verbs:
 
 - `harmonics play --intent success --confidence high --urgency low` — render
   explicit axes to a note sequence (dry-run by default; `--play`/`--out` produce
   sound or a file).
 - `harmonics say "done, tests all green"` — infer the axes from a sentence, then
   render.
+- `harmonics demo` — tour the whole voice in one command: dry-run by default, or
+  `--play` / `--html` / `--wav` / `--out` / `--json` to hear it, write a
+  browser-playable gallery, or stream the clips into your own code.
 
 ## What you get today
 
@@ -83,6 +86,9 @@ command you run is `harmonics`.
 | `explain <path>` | Markdown docs for any noun/verb path. |
 | `overview` | Read-only descriptive snapshot of the agent. |
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
+| `play` | Render explicit axes to a note sequence (dry-run; `--wav`/`--play` for audio). |
+| `say "<sentence>"` | Infer axes from a sentence and render it in the agent's voice. |
+| `demo` | Tour the whole voice: `--play` / `--html` / `--wav` / `--out` / `--json` (dry-run by default). |
 | `cli overview` | Describe the CLI surface itself. |
 
 Every command supports `--json`. Results go to stdout, errors/diagnostics to

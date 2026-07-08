@@ -43,6 +43,8 @@ Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 - `harmonics say "<sentence>"` — sentence → inferred axes + text contour +
   emphasis → notes, in the agent's voice (dry-run default; `--wav` for an
   offline WAV file, `--play` for live audio).
+- `harmonics demo` — tours the whole agent voice across the design spine in
+  one command (dry-run default; `--play`/`--html`/`--wav`/`--out`/`--json`).
 - `harmonics cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -56,6 +58,7 @@ Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 
 - `harmonics explain whoami`
 - `harmonics explain doctor`
+- `harmonics explain demo`
 """
 
 _WHOAMI = """\
@@ -291,6 +294,85 @@ Gliding is the default (`smooth`); pass `--articulation discrete` for the
 original per-note behavior.
 """
 
+_DEMO = """\
+# harmonics demo
+
+One command that tours the WHOLE agent voice across the design spine (see
+`CLAUDE.md` and issue #1): six curated groups — every `--intent` value, the
+same intent in several agent identities, confidence/urgency shading
+extremes, sentences whose tune tracks the words (the `say` pipeline), plain
+vs. `*emphasized*` stress, and one sentence rendered in all four
+`--articulation` styles side by side. It makes no new synthesis decisions of
+its own: every clip is rendered through the exact same pipeline `harmonics
+play`/`harmonics say` already use (`harmonics.demo.showcase`), so the tour is
+always in sync with the real voice.
+
+## Three audiences, three output modes
+
+This is a spec-honesty condition: `demo` serves three different audiences,
+each with the mode built for them.
+
+- **humans** who just want to hear it — `--play` (plays every clip live) or
+  `--html FILE` (a self-contained, browser-playable gallery: one card per
+  clip with its axes, a note-sequence summary, and an embedded playable
+  `<audio>` element; no server, no network, no external assets).
+- **integrating developers** — the public `harmonics.demo.showcase()`
+  function, imported directly: `showcase(articulation=None) -> list[Clip]`,
+  each `Clip` a `(label, axes, notes, wav)` tuple. No CLI/subprocess needed.
+- **embedding code / pipelines** — `--json` (the note-sequence-per-clip
+  payload on stdout: label + axes + notes, no raw wav bytes) or
+  `showcase()` directly, same entry point integrating developers use.
+
+## Flags
+
+- `--play` — play every clip live via `simpleaudio`/`sounddevice` (tried in
+  that order, whichever is installed); takes priority over every file flag
+  below if given alongside them. If neither library is installed, fails
+  with a structured `CliError` and a remediation hint instead of a silent
+  no-op.
+- `--html FILE` — write a self-contained, browser-playable HTML gallery to
+  FILE.
+- `--wav DIR` — write one WAV file per clip into DIR (created if missing).
+- `--out FILE` — write the whole tour as ONE concatenated WAV to FILE, clips
+  separated by a short silent gap.
+- `--json` — emit the note-sequence-per-clip payload as JSON (label + axes
+  + notes; no wav bytes — wav is binary and JSON can't carry it).
+- `--articulation {discrete,speechy,smooth,alien}` — default: each clip
+  renders in its OWN curated style, so the dedicated "articulations" group
+  still demonstrates all four side by side. Passing an explicit value
+  re-renders the WHOLE tour in that one voice instead. Either way the note
+  sequences never change — only how they're synthesized to wav — so
+  `--json`/the dry-run listing are identical regardless of
+  `--articulation`.
+
+`--html`/`--wav`/`--out` are independent of one another — any combination
+writes all requested outputs in one call; `--play` takes priority over all
+three if given alongside them.
+
+## Dry-run by default
+
+With no flags, `demo` only lists the clips: one line per clip
+(`<label>  [axes...]  <n> notes` in text mode), or the full
+note-sequence-per-clip payload with `--json`. No file is written, no sound
+is made. Producing sound or a file always requires an explicit flag
+(`--play`, `--html`, `--wav`, or `--out`).
+
+## Usage
+
+    harmonics demo
+    harmonics demo --json
+    harmonics demo --play
+    harmonics demo --html gallery.html
+    harmonics demo --wav clips/
+    harmonics demo --out tour.wav
+    harmonics demo --wav clips/ --articulation alien
+
+## See also
+
+- `harmonics explain play`
+- `harmonics explain say`
+"""
+
 _CLI = """\
 # harmonics cli
 
@@ -315,6 +397,7 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("doctor",): _DOCTOR,
     ("play",): _PLAY,
     ("say",): _SAY,
+    ("demo",): _DEMO,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }
