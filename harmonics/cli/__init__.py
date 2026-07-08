@@ -67,11 +67,17 @@ def _build_parser() -> argparse.ArgumentParser:
     from harmonics.cli._commands import explain as _explain_cmd
     from harmonics.cli._commands import learn as _learn_cmd
     from harmonics.cli._commands import overview as _overview_cmd
+    from harmonics.cli._commands import play as _play_cmd
+    from harmonics.cli._commands import say as _say_cmd
     from harmonics.cli._commands import whoami as _whoami_cmd
 
     parser = _CliArgumentParser(
         prog="harmonics",
-        description="harmonics-cli — a clonable template for AgentCulture mesh agents.",
+        description=(
+            "harmonics-cli — an agent or robot's own non-speech VOICE: render "
+            "live intent, confidence, urgency, state, and identity into short, "
+            "pleasant sonic gestures (text-to-notes, the inverse of TTS)."
+        ),
     )
     parser.add_argument(
         "--version",
@@ -87,6 +93,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _explain_cmd.register(sub)
     _overview_cmd.register(sub)
     _doctor_cmd.register(sub)
+    _play_cmd.register(sub)
+    _say_cmd.register(sub)
     _cli_group.register(sub)
     # Register your own noun groups here:
     #   from harmonics.cli._commands import my_noun as _my_noun_group

@@ -19,5 +19,8 @@ ignores:
   - ".local/**"
   - ".afi/**"
   - ".teken/**"
+  # devague working state (frames/plans committed as JSON; reviews/questions
+  # are git-ignored markdown) — tool-generated, not authored prose.
+  - ".devague/**"
   # Vendored skills are cited verbatim from guildmaster — do not reformat them.
   - ".claude/skills/**"

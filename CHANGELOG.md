@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-08
+
+### Added
+
+- The **harmonics voice domain** — the non-TTS audio surface from issue #1, built
+  as an offline, dependency-free text-to-notes core with audio layered on top:
+  - `harmonics/axes.py` — the shared five-axis vocabulary (intent, confidence,
+    urgency, state, identity) and a validated `Axes` record.
+  - `harmonics/notes.py` — the `NoteEvent` core (start, duration, pitch,
+    velocity, voice) + JSON and MIDI-like serialization; the unit-test surface
+    and robot/synth representation.
+  - `harmonics/mapping.py` — the design spine: axes → sonic parameters (intent →
+    motif, confidence → cadence, urgency → tempo/repetition, state →
+    sustained-vs-discrete) over a consonant pentatonic scale with a velocity
+    ceiling, so an urgent voice is attention-grabbing but never an alarm.
+  - `harmonics/identity.py` — per-agent voice-prints (`root_pitch`, `instrument`,
+    `seed`) derived deterministically from the identity string, with palette
+    overrides — so you can tell *who* is speaking by ear.
+  - `harmonics/variation.py` — deterministic micro-variation keyed by a `--seq`
+    nonce (never wall-clock/entropy), so repeated utterances feel alive yet
+    reproducible.
+  - `harmonics/inference.py` — offline sentence → axes inference (a documented
+    cue table, no model/network).
+  - `harmonics/contour.py` — text → melodic contour (one note per word) so a
+    listener can approximately follow sound ↔ text; still non-speech.
+  - `harmonics/stress.py` — expressive emphasis (`*word*` / ALL-CAPS) that raises
+    pitch/velocity within the level ceiling.
+  - `harmonics/audio/` — a pure-stdlib offline WAV synthesizer; live playback via
+    an isolated, lazy optional import so the core never needs an audio device.
+- The **`play`** verb (`harmonics play --intent … [--confidence/--urgency/--state]
+  [--as] [--seq]`) — explicit axes → notes, dry-run by default, with
+  `--json`/`--out`/`--wav`/`--play`.
+- The **`say`** verb (`harmonics say "<sentence>"`) — infers axes, renders the
+  text-tracking tune in the agent's voice, applies emphasis and micro-variation;
+  same output/capture contract as `play`.
+- **`--articulation {discrete, speechy, smooth, alien}`** on both verbs — how the
+  synth *moves* between notes. `discrete` is the original per-note synth; the
+  glide styles run one continuous oscillator that slides (portamento) and stays
+  legato between word-pitches with a light vibrato, so the voice flows and reads
+  like speech. Defaults to `smooth` (gliding); affects `--wav`/`--play` only —
+  the note sequence is unchanged.
+- `docs/ear-test-protocol.md` — blind-listening protocols with stated
+  better-than-chance bars for the human-discrimination claims.
+- `docs/specs/` + `docs/plans/` — the converged devague spec and buildable plan
+  this increment was built from.
+
+### Changed
+
+- Replaced the culture-agent-template self-descriptions (parser description,
+  `explain` root, `learn`, `overview`, README) with the real harmonics **voice**
+  mission — the five-axis design-spine table and the voice-vs-soundtrack boundary.
+
 ## [0.4.1] - 2026-07-08
 
 ### Changed

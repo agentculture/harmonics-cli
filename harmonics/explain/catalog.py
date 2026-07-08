@@ -17,21 +17,32 @@ from __future__ import annotations
 _ROOT = """\
 # harmonics-cli
 
-A clonable template for AgentCulture mesh agents. It carries an agent-first CLI
-(cited from the teken `python-cli` reference), a mesh identity (`culture.yaml` +
-`CLAUDE.md`), the canonical guildmaster skill kit under `.claude/skills/`, and a
-buildable/deployable package baseline. Clone it, rename the package, edit
-`culture.yaml`, and you have a new agent.
+harmonics-cli gives an agent or robot its own **non-speech voice**. It renders
+the agent's live meaning — five axes: **intent, confidence, urgency, state,
+identity** — into short, pleasant sonic gestures (chimes, flutes, pulses, tonal
+motifs) a listener recognizes by *who* is speaking and *what* they mean. It is
+the first-person inverse of text-to-speech: it maps *meaning*, not phonemes, and
+reproduces no words.
+
+This is a first-person *utterance* the agent emits as itself, live and driven by
+its own axes — not a third-person spectator soundtrack (like league-of-agents'
+replay score, which narrates a match from the outside off an event log). Voice,
+not background; meaning, not TTS.
 
 Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
 
-## Verbs
+## Verbs (today)
 
 - `harmonics whoami` — identity probe from `culture.yaml`.
 - `harmonics learn` — structured self-teaching prompt.
 - `harmonics explain <path>` — markdown docs for any noun/verb.
 - `harmonics overview` — descriptive snapshot of the agent.
 - `harmonics doctor` — check the agent-identity invariants.
+- `harmonics play` — render explicit axes to a note sequence (dry-run
+  default; `--wav` for an offline WAV file, `--play` for live audio).
+- `harmonics say "<sentence>"` — sentence → inferred axes + text contour +
+  emphasis → notes, in the agent's voice (dry-run default; `--wav` for an
+  offline WAV file, `--play` for live audio).
 - `harmonics cli overview` — describe the CLI surface.
 
 ## Exit-code policy
@@ -110,6 +121,176 @@ skills-present check. Exits 1 when unhealthy.
     harmonics doctor --json
 """
 
+_PLAY = """\
+# harmonics play
+
+Renders explicit axes to a note sequence — the first domain verb (see the
+design spine in `CLAUDE.md` and the build brief, issue #1). Composes
+`harmonics.axes` (the vocabulary), `harmonics.identity` (the *who* → voice
+signature), and `harmonics.mapping` (axes → notes), plus an optional
+deterministic micro-variation pass (`harmonics.variation`) via `--seq`.
+
+**Dry-run by default** — with no `--out`/`--wav`/`--play`, this only prints
+the note sequence: no file is written, no sound is made. Safe to call in a
+loop. `--wav FILE` renders and writes a real WAV file (`harmonics.audio`)
+with no live device needed. `--play` renders and plays it live through
+`simpleaudio` or `sounddevice` (tried in that order, whichever is
+installed) and takes priority over `--out`/`--wav` if given alongside them;
+if neither library is installed it fails with a structured `CliError` and a
+remediation hint instead of a silent no-op.
+
+## Axes
+
+- `--intent` (required) — one of: ack, question, success, failure, thinking,
+  handoff. Picks the motif family.
+- `--confidence` — low, medium, high. Shades the cadence (resolved vs.
+  suspended).
+- `--urgency` — calm, normal, urgent. Shades tempo, attack, repetition.
+- `--state` — idle, working, blocked, done. Shades sustain vs. discrete.
+- `--as AGENT` — derive the voice signature (tonal center + instrument) from
+  this identity string. Default: harmonics-cli's own signature.
+- `--seq NONCE` — deterministic micro-variation nonce (int or string); the
+  same nonce always renders the same variation.
+
+## Usage
+
+    harmonics play --intent success
+    harmonics play --intent question --confidence low --as my-agent
+    harmonics play --intent success --json
+    harmonics play --intent success --seq 7
+    harmonics play --intent success --out gesture.json
+    harmonics play --intent success --wav gesture.wav
+    harmonics play --intent success --play
+    harmonics play --intent success --wav gesture.wav --articulation alien
+
+## Output modes
+
+- Dry-run (default) — the note sequence to stdout: one line per note
+  (`start dur pitch vel voice`) in text mode, or a JSON list of note objects
+  with `--json`. Writes no file, makes no sound.
+- `--out FILE` — writes the note-sequence JSON to `FILE`; prints a one-line
+  confirmation. No audio backend required.
+- `--wav FILE` — renders and writes a real WAV audio file to `FILE`. No live
+  device needed — this only touches the filesystem.
+- `--play` — renders and plays the gesture live through `simpleaudio` or
+  `sounddevice` (tried in that order, whichever is installed). If neither is
+  installed, fails with a structured `CliError` and a remediation hint to
+  install one or use `--wav`/`--out` instead.
+
+## `--articulation` — how the voice moves between notes
+
+Only affects `--wav`/`--play` (dry-run/`--json`/`--out` are note-sequence
+output and never change). Four styles (`harmonics.audio.synth.ARTICULATIONS`):
+
+- `discrete` — the original synth: each note is its own short tone, with
+  silence possible between them (a "music box").
+- `speechy` — a continuous gliding voice (legato + portamento) that slides
+  between word-pitches instead of stepping between them; mild vibrato. The
+  gentlest glide.
+- `smooth` (**default**) — the same continuous glide, more pronounced —
+  slower transitions, a bit more vibrato.
+- `alien` — the most pronounced glide and vibrato of the three — an
+  otherworldly, always-sliding voice.
+
+Gliding is the default (`smooth`); pass `--articulation discrete` for the
+original per-note behavior.
+"""
+
+_SAY = """\
+# harmonics say
+
+Renders a whole SENTENCE to notes in the agent's own voice — the payoff verb
+of the text-to-notes path (see the design spine in `CLAUDE.md` and the build
+brief, issue #1). Where `play` takes explicit axes, `say` takes free text and
+composes the full pipeline:
+
+1. `harmonics.stress.parse_emphasis` strips `*word*`/ALL-CAPS emphasis
+   markers, returning the clean text plus which word indices to stress.
+2. `harmonics.inference.infer_axes` reads the clean text and infers
+   intent/confidence/urgency/state — a static cue-table, not a model.
+3. `harmonics.identity` resolves *who* is speaking (`--as`, else
+   harmonics-cli's own identity) to a voice signature.
+4. `harmonics.contour.text_contour` renders the clean text to a followable
+   melody — ONE note per word, in the agent's key, so a human can trace the
+   tune back to the words.
+5. Axis shading colors that contour: urgency scales the whole contour's tempo
+   (urgent tightens, calm loosens); confidence reshapes only the final note
+   (high = a crisp resolved landing, low = a soft lingering tail). Neither
+   ever touches pitch, so the word-tracking melody and its in-key consonance
+   are preserved.
+6. `harmonics.stress.apply_stress` re-emphasizes the stressed word indices
+   from step 1 (louder + an octave up), on top of the shading above.
+7. `harmonics.variation.apply_variation` adds an optional deterministic
+   micro-variation pass via `--seq`.
+
+**Dry-run by default** — with no `--out`/`--midi`/`--wav`/`--play`, this only
+prints the note sequence: no file is written, no sound is made. Safe to call
+in a loop. `--wav FILE` renders and writes a real WAV file
+(`harmonics.audio`) with no live device needed. `--play` renders and plays
+the utterance live through `simpleaudio` or `sounddevice` (tried in that
+order, whichever is installed) and takes priority over
+`--out`/`--midi`/`--wav` if given alongside them; if neither library is
+installed it fails with a structured `CliError` and a remediation hint
+instead of a silent no-op.
+
+## Flags
+
+- `sentence` (positional, required) — the text to speak. Emphasize a word
+  with `*asterisks*` or ALL-CAPS.
+- `--as AGENT` — derive the voice signature from this identity string.
+  Default: harmonics-cli's own signature.
+- `--seq NONCE` — deterministic micro-variation nonce (int or string); the
+  same nonce always renders the same variation.
+
+## Usage
+
+    harmonics say "done, tests all green"
+    harmonics say "did it pass?" --as my-agent
+    harmonics say "push it *now*" --json
+    harmonics say "wrap it up, no rush" --seq 7
+    harmonics say "all tests passed" --out utterance.json
+    harmonics say "all tests passed" --midi utterance.midi.json
+    harmonics say "all tests passed" --wav utterance.wav
+    harmonics say "all tests passed" --play
+    harmonics say "all tests passed" --wav utterance.wav --articulation alien
+
+## Output modes
+
+- Dry-run (default) — the note sequence to stdout: one line per note
+  (`start dur pitch vel voice`) in text mode, or a JSON list of note objects
+  with `--json`. Writes no file, makes no sound.
+- `--out FILE` — writes the note-sequence JSON to `FILE`.
+- `--midi FILE` — writes the MIDI-like tick representation
+  (`harmonics.notes.to_midi_notes`) to `FILE`. No audio backend required for
+  either.
+- `--wav FILE` — renders and writes a real WAV audio file to `FILE`. No live
+  device needed — this only touches the filesystem.
+- `--play` — renders and plays the utterance live through `simpleaudio` or
+  `sounddevice` (tried in that order, whichever is installed); takes
+  priority over `--out`/`--midi`/`--wav` if given alongside them. If neither
+  library is installed, fails with a structured `CliError` and a
+  remediation hint to install one or use `--wav`/`--out`/`--midi` instead.
+
+## `--articulation` — how the voice moves between notes
+
+Only affects `--wav`/`--play` (dry-run/`--json`/`--out`/`--midi` are
+note-sequence output and never change). Four styles
+(`harmonics.audio.synth.ARTICULATIONS`):
+
+- `discrete` — the original synth: each note is its own short tone, with
+  silence possible between them (a "music box").
+- `speechy` — a continuous gliding voice (legato + portamento) that slides
+  between word-pitches instead of stepping between them; mild vibrato. The
+  gentlest glide.
+- `smooth` (**default**) — the same continuous glide, more pronounced —
+  slower transitions, a bit more vibrato.
+- `alien` — the most pronounced glide and vibrato of the three — an
+  otherworldly, always-sliding voice.
+
+Gliding is the default (`smooth`); pass `--articulation discrete` for the
+original per-note behavior.
+"""
+
 _CLI = """\
 # harmonics cli
 
@@ -132,6 +313,8 @@ ENTRIES: dict[tuple[str, ...], str] = {
     ("explain",): _EXPLAIN,
     ("overview",): _OVERVIEW,
     ("doctor",): _DOCTOR,
+    ("play",): _PLAY,
+    ("say",): _SAY,
     ("cli",): _CLI,
     ("cli", "overview"): _CLI,
 }
