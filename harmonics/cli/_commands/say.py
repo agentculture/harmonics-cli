@@ -329,22 +329,41 @@ def _emit(seq: list[NoteEvent], args: argparse.Namespace, json_mode: bool) -> No
     _dry_run(seq, json_mode)
 
 
-def cmd_say(args: argparse.Namespace) -> int | None:
-    json_mode = bool(getattr(args, "json", False))
+def render_notes(
+    sentence: str,
+    *,
+    agent: str | None = None,
+    seq: int | str | None = None,
+) -> list[NoteEvent]:
+    """Render ``sentence`` to the agent's voice note sequence — the shared
+    core of :func:`cmd_say` (also reused by ``harmonics demo``).
 
-    clean, stressed = parse_emphasis(args.sentence)
+    Parses emphasis markers, infers the axes from the clean text, resolves
+    the speaking agent's voice signature (``agent``, else this package's own
+    default identity), renders the word-tracking melodic contour, axis-shades
+    it, re-emphasizes stressed words, and applies the optional deterministic
+    ``seq`` micro-variation — in that order, exactly mirroring ``cmd_say``.
+    """
+    clean, stressed = parse_emphasis(sentence)
     axes = infer_axes(clean)
-    if args.as_agent:
-        axes = axes.with_(identity=args.as_agent)
-        sig = signature_for(args.as_agent)
+    if agent:
+        axes = axes.with_(identity=agent)
+        sig = signature_for(agent)
     else:
         sig = derive_signature(DEFAULT_IDENTITY)
 
-    seq = text_contour(clean, root_pitch=sig.root_pitch, instrument=sig.instrument)
-    seq = _shade_by_axes(seq, axes)
-    seq = apply_stress(seq, stressed)
-    if args.seq is not None:
-        seq = apply_variation(seq, args.seq)
+    seq_notes = text_contour(clean, root_pitch=sig.root_pitch, instrument=sig.instrument)
+    seq_notes = _shade_by_axes(seq_notes, axes)
+    seq_notes = apply_stress(seq_notes, stressed)
+    if seq is not None:
+        seq_notes = apply_variation(seq_notes, seq)
+    return seq_notes
+
+
+def cmd_say(args: argparse.Namespace) -> int | None:
+    json_mode = bool(getattr(args, "json", False))
+
+    seq = render_notes(args.sentence, agent=args.as_agent, seq=args.seq)
 
     _emit(seq, args, json_mode)
     return None
