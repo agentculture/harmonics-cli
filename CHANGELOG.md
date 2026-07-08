@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-08
+
+### Added
+
+- **`harmonics demo`** — one command that tours the whole agent voice across the
+  design spine, in three output modes (issue #4):
+  - **Play / hear it** — `--play` streams every clip through the audio backend;
+    `--html FILE` writes a self-contained, browser-playable gallery (WAVs
+    embedded as data-URIs, per-clip axes + note summary, both light/dark
+    themes, deterministic so it is snapshot-testable).
+  - **Write files** — `--wav DIR` (one WAV per clip) and `--out FILE` (one
+    concatenated tour WAV with short gaps between clips).
+  - **Stream / import** — a public `harmonics.demo.showcase()` yields one
+    `(label, axes, note_sequence, wav_bytes)` per clip; `--json` emits the
+    note-sequence-per-clip payload on stdout.
+  - **Dry-run by default** — no flags lists the curated clips + axes; producing
+    sound or files needs an explicit flag.
+  - **`--articulation {discrete,speechy,smooth,alien}`** re-renders the whole
+    tour in one voice; the default renders each clip in its own articulation, so
+    the dedicated `articulations` section still demonstrates all four styles.
+  - The tour is a curated 28-clip data matrix (`harmonics/demo/matrix.py`) across
+    six groups — intents, identity, confidence/urgency shading, say-tracks-words,
+    stress, and articulations — packaging over the existing v0.5.0 pipeline with
+    **no new synthesis**. The pure text→notes path stays offline and
+    dependency-free (only `--play` needs an audio backend).
+- `harmonics.cli._commands.say.render_notes()` — the sentence → notes pipeline
+  extracted as a public function, now shared by `harmonics say` and `demo` (a
+  single source of truth for the spoken voice; `cmd_say` behaviour unchanged).
+
+### Changed
+
+- The `explain` catalog gains a `demo` entry, and the root page lists it.
+
 ## [0.5.0] - 2026-07-08
 
 ### Added
