@@ -85,7 +85,7 @@ class Axes:
             value = getattr(self, field)
             if value is not None and value not in ALLOWED[field]:
                 raise ValueError(
-                    f"unknown {field} {value!r}; expected one of " f"{', '.join(ALLOWED[field])}"
+                    f"unknown {field} {value!r}; expected one of {', '.join(ALLOWED[field])}"
                 )
         if self.identity is not None and not self.identity.strip():
             raise ValueError("identity, when given, must be a non-empty string")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from harmonics.axes import CONFIDENCES, INTENTS, STATES, URGENCIES, Axes
@@ -34,7 +36,7 @@ def test_full_axes_roundtrips_to_dict() -> None:
 def test_frozen_and_hashable() -> None:
     ax = Axes(intent="ack")
     assert hash(ax) == hash(Axes(intent="ack"))
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         ax.intent = "failure"  # type: ignore[misc]
 
 

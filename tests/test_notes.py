@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import FrozenInstanceError
 
 import pytest
 
@@ -158,5 +159,5 @@ def test_boundary_values_are_accepted() -> None:
 
 def test_frozen_event_is_immutable() -> None:
     ev = _make_event()
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         ev.pitch = 61  # type: ignore[misc]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from harmonics.identity import (
@@ -135,7 +137,7 @@ def test_root_pitches_and_instruments_are_documented_and_nonempty() -> None:
 def test_signature_is_frozen_and_hashable() -> None:
     sig = derive_signature("harmonics-cli")
     assert hash(sig) == hash(derive_signature("harmonics-cli"))
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         sig.root_pitch = 60  # type: ignore[misc]
 
 

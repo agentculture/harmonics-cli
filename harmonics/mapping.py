@@ -333,8 +333,11 @@ def render_gesture(
         )
         onset += ioi
 
-    # A held/suspended tail (e.g. blocked) sustains the final note.
-    if st.hold != 1.0 and events:
+    # A held/suspended tail (e.g. blocked) sustains the final note. Branch on
+    # the source axis (a string) rather than comparing the derived float
+    # multiplier for equality — "blocked" is the only state whose ``hold``
+    # differs from the neutral 1.0 (see ``_STATE`` above).
+    if axes.state == "blocked" and events:
         last = events[-1]
         held = _clamp(last.duration * st.hold, MIN_NOTE_DURATION, MAX_NOTE_DURATION)
         events[-1] = NoteEvent(
