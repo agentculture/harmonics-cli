@@ -161,6 +161,7 @@ remediation hint instead of a silent no-op.
     harmonics play --intent success --out gesture.json
     harmonics play --intent success --wav gesture.wav
     harmonics play --intent success --play
+    harmonics play --intent success --wav gesture.wav --articulation alien
 
 ## Output modes
 
@@ -175,6 +176,24 @@ remediation hint instead of a silent no-op.
   `sounddevice` (tried in that order, whichever is installed). If neither is
   installed, fails with a structured `CliError` and a remediation hint to
   install one or use `--wav`/`--out` instead.
+
+## `--articulation` — how the voice moves between notes
+
+Only affects `--wav`/`--play` (dry-run/`--json`/`--out` are note-sequence
+output and never change). Four styles (`harmonics.audio.synth.ARTICULATIONS`):
+
+- `discrete` — the original synth: each note is its own short tone, with
+  silence possible between them (a "music box").
+- `speechy` — a continuous gliding voice (legato + portamento) that slides
+  between word-pitches instead of stepping between them; mild vibrato. The
+  gentlest glide.
+- `smooth` (**default**) — the same continuous glide, more pronounced —
+  slower transitions, a bit more vibrato.
+- `alien` — the most pronounced glide and vibrato of the three — an
+  otherworldly, always-sliding voice.
+
+Gliding is the default (`smooth`); pass `--articulation discrete` for the
+original per-note behavior.
 """
 
 _SAY = """\
@@ -233,6 +252,7 @@ instead of a silent no-op.
     harmonics say "all tests passed" --midi utterance.midi.json
     harmonics say "all tests passed" --wav utterance.wav
     harmonics say "all tests passed" --play
+    harmonics say "all tests passed" --wav utterance.wav --articulation alien
 
 ## Output modes
 
@@ -250,6 +270,25 @@ instead of a silent no-op.
   priority over `--out`/`--midi`/`--wav` if given alongside them. If neither
   library is installed, fails with a structured `CliError` and a
   remediation hint to install one or use `--wav`/`--out`/`--midi` instead.
+
+## `--articulation` — how the voice moves between notes
+
+Only affects `--wav`/`--play` (dry-run/`--json`/`--out`/`--midi` are
+note-sequence output and never change). Four styles
+(`harmonics.audio.synth.ARTICULATIONS`):
+
+- `discrete` — the original synth: each note is its own short tone, with
+  silence possible between them (a "music box").
+- `speechy` — a continuous gliding voice (legato + portamento) that slides
+  between word-pitches instead of stepping between them; mild vibrato. The
+  gentlest glide.
+- `smooth` (**default**) — the same continuous glide, more pronounced —
+  slower transitions, a bit more vibrato.
+- `alien` — the most pronounced glide and vibrato of the three — an
+  otherworldly, always-sliding voice.
+
+Gliding is the default (`smooth`); pass `--articulation discrete` for the
+original per-note behavior.
 """
 
 _CLI = """\

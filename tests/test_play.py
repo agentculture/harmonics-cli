@@ -149,6 +149,136 @@ def test_play_wav_json_reports_wrote_and_note_count(
     assert payload["notes"] > 0
 
 
+# --- --articulation: glide-by-default voice styles ---------------------------
+
+
+def test_play_articulation_alien_wav_writes_a_valid_wav_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "gesture.wav"
+    rc = main(["play", "--intent", "success", "--articulation", "alien", "--wav", str(target)])
+    assert rc == 0
+    assert target.is_file()
+    with wave.open(str(target), "rb") as wf:
+        assert wf.getnchannels() == 1
+        assert wf.getsampwidth() == 2
+        assert wf.getnframes() > 0
+
+
+def test_play_default_articulation_wav_writes_a_valid_wav_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No ``--articulation`` at all -- the default (gliding) still writes a
+    valid WAV file."""
+    target = tmp_path / "gesture.wav"
+    rc = main(["play", "--intent", "success", "--wav", str(target)])
+    assert rc == 0
+    with wave.open(str(target), "rb") as wf:
+        assert wf.getnframes() > 0
+
+
+def test_play_default_articulation_is_smooth(tmp_path: Path) -> None:
+    """The user asked for gliding by default -- verify the no-flag ``--wav``
+    output is byte-identical to explicit ``--articulation smooth``."""
+    default_target = tmp_path / "default.wav"
+    smooth_target = tmp_path / "smooth.wav"
+    rc1 = main(
+        ["play", "--intent", "success", "--as", "harmonics-cli", "--wav", str(default_target)]
+    )
+    rc2 = main(
+        [
+            "play",
+            "--intent",
+            "success",
+            "--as",
+            "harmonics-cli",
+            "--articulation",
+            "smooth",
+            "--wav",
+            str(smooth_target),
+        ]
+    )
+    assert rc1 == rc2 == 0
+    assert default_target.read_bytes() == smooth_target.read_bytes()
+
+
+def test_play_articulation_discrete_wav_differs_from_default(tmp_path: Path) -> None:
+    discrete_target = tmp_path / "discrete.wav"
+    default_target = tmp_path / "default.wav"
+    main(
+        [
+            "play",
+            "--intent",
+            "success",
+            "--as",
+            "harmonics-cli",
+            "--articulation",
+            "discrete",
+            "--wav",
+            str(discrete_target),
+        ]
+    )
+    main(["play", "--intent", "success", "--as", "harmonics-cli", "--wav", str(default_target)])
+    assert discrete_target.read_bytes() != default_target.read_bytes()
+
+
+def test_play_invalid_articulation_exits_1_structured(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["play", "--intent", "success", "--articulation", "robotic"])
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+
+
+def test_play_json_output_identical_regardless_of_articulation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Articulation is a synth-only property -- dry-run/``--json`` note
+    output must not vary with it."""
+    rc1 = main(
+        [
+            "play",
+            "--intent",
+            "success",
+            "--as",
+            "harmonics-cli",
+            "--articulation",
+            "discrete",
+            "--json",
+        ]
+    )
+    out1 = capsys.readouterr().out
+    rc2 = main(
+        [
+            "play",
+            "--intent",
+            "success",
+            "--as",
+            "harmonics-cli",
+            "--articulation",
+            "alien",
+            "--json",
+        ]
+    )
+    out2 = capsys.readouterr().out
+    assert rc1 == rc2 == 0
+    assert out1 == out2
+
+
+def test_play_dry_run_text_identical_regardless_of_articulation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rc1 = main(
+        ["play", "--intent", "success", "--as", "harmonics-cli", "--articulation", "speechy"]
+    )
+    out1 = capsys.readouterr().out
+    rc2 = main(["play", "--intent", "success", "--as", "harmonics-cli", "--articulation", "alien"])
+    out2 = capsys.readouterr().out
+    assert rc1 == rc2 == 0
+    assert out1 == out2
+
+
 # --- error contract (criterion 5) -------------------------------------------
 
 

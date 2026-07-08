@@ -31,6 +31,11 @@ bare traceback) if the write itself fails, e.g. a missing parent directory.
 ``sounddevice``) if either is installed; with neither installed it fails
 loudly with a friendly ``CliError`` hint rather than silently no-op'ing — use
 ``--wav`` instead when you just want a file and no device at all.
+
+``--articulation`` (default ``"smooth"``) selects HOW ``--wav``/``--play``
+synthesize the gesture — a continuous gliding voice by default, or the
+original discrete per-note tones (``discrete``) — without ever changing the
+note sequence itself; see :mod:`harmonics.audio.synth` for the four styles.
 """
 
 from __future__ import annotations
@@ -98,7 +103,20 @@ def _raise_write_error(path: str, err: OSError) -> None:
     ) from err
 
 
-def _play_live(notes: list[NoteEvent], json_mode: bool) -> None:
+def _raise_articulation_error(articulation: str, err: ValueError) -> None:
+    """Translate an unknown-articulation :class:`ValueError` from
+    :mod:`harmonics.audio` into the structured :class:`CliError` contract.
+    Unreachable in normal CLI use (``--articulation`` is constrained by
+    argparse ``choices=``) but keeps the contract honest for any other
+    caller of these helpers."""
+    raise CliError(
+        code=EXIT_USER_ERROR,
+        message=f"invalid articulation {articulation!r}: {err}",
+        remediation="choose one of: discrete, speechy, smooth, alien",
+    ) from err
+
+
+def _play_live(notes: list[NoteEvent], articulation: str, json_mode: bool) -> None:
     """``--play``: render and play ``notes`` through a live backend."""
     # Lazy import: harmonics.audio's own optional playback backend is
     # isolated behind this call, so importing this module (and every other
@@ -107,19 +125,24 @@ def _play_live(notes: list[NoteEvent], json_mode: bool) -> None:
     # friendly CliError rather than failing silently.
     from harmonics.audio import play as play_audio
 
-    play_audio(notes)
+    try:
+        play_audio(notes, articulation=articulation)
+    except ValueError as err:
+        _raise_articulation_error(articulation, err)
     if json_mode:
         emit_result({"played": True, "notes": len(notes)}, json_mode=True)
     else:
         emit_result(f"played {len(notes)} note(s)", json_mode=False)
 
 
-def _write_wav_file(notes: list[NoteEvent], path: str, json_mode: bool) -> None:
+def _write_wav_file(notes: list[NoteEvent], path: str, articulation: str, json_mode: bool) -> None:
     """``--wav``: render and write a WAV file — no live device needed."""
     from harmonics.audio import write_wav
 
     try:
-        write_wav(notes, path)
+        write_wav(notes, path, articulation=articulation)
+    except ValueError as err:
+        _raise_articulation_error(articulation, err)
     except OSError as err:
         _raise_write_error(path, err)
     if json_mode:
@@ -152,9 +175,9 @@ def _emit(notes: list[NoteEvent], args: argparse.Namespace, json_mode: bool) -> 
     """Dispatch to the right output path: ``--play`` > ``--wav`` > ``--out`` >
     the dry-run default — mirrors the priority documented on each flag."""
     if args.play:
-        _play_live(notes, json_mode)
+        _play_live(notes, args.articulation, json_mode)
     elif args.wav:
-        _write_wav_file(notes, args.wav, json_mode)
+        _write_wav_file(notes, args.wav, args.articulation, json_mode)
     elif args.out:
         _write_out_file(notes, args.out, json_mode)
     else:
@@ -238,6 +261,17 @@ def register(sub: argparse._SubParsersAction) -> None:
             "Render and play audio live via 'simpleaudio' or 'sounddevice' if "
             "installed; otherwise fails with a friendly error (use --wav to "
             "capture to a file with no device)."
+        ),
+    )
+    p.add_argument(
+        "--articulation",
+        choices=("discrete", "speechy", "smooth", "alien"),
+        default="smooth",
+        help=(
+            "How the voice moves between notes, for --wav/--play only (the "
+            "note sequence itself never changes): 'discrete' is separate "
+            "per-note tones; 'speechy'/'smooth'/'alien' are one continuous "
+            "gliding voice, increasingly slurred/vibrato'd. Default: smooth."
         ),
     )
     p.set_defaults(func=cmd_play)

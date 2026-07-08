@@ -1,16 +1,17 @@
 """The offline audio backend — a PURE-STDLIB per-note additive-sine synth.
 
 This is the one place in ``harmonics`` where a :class:`~harmonics.notes.
-NoteEvent` sequence becomes actual sound: :func:`render_wav` mixes each note
-into a mono 16-bit PCM WAV byte string, :func:`write_wav` saves that to a
-file, and :func:`play` renders and then plays it through a live device.
+NoteEvent` sequence becomes actual sound: :func:`render_wav` mixes a note
+sequence into a mono 16-bit PCM WAV byte string, :func:`write_wav` saves that
+to a file, and :func:`play` renders and then plays it through a live device.
 
 Two hard rules from ``CLAUDE.md``'s design spine:
 
 * the pure text->notes CORE must stay dependency-free and importable with
   **no audio device** — so :func:`render_wav`/:func:`write_wav` (and this
   module's own import) use only the standard library (``wave``, ``math``,
-  ``array``, ``io``). No third-party import happens at module import time.
+  ``array``, ``io``, ``sys``). No third-party import happens at module
+  import time.
 * audio-PRODUCING actions require an explicit flag; the only function here
   that touches a real device, :func:`play`, isolates its optional playback
   library behind a **lazy, in-function** import (tried in order:
@@ -20,8 +21,27 @@ Two hard rules from ``CLAUDE.md``'s design spine:
   CliError` every other verb failure uses, rather than a bare
   ``ImportError`` or a silent no-op.
 
-Synthesis approach
--------------------
+Articulation — how the voice MOVES between notes
+--------------------------------------------------
+Every renderer here takes an ``articulation`` name (:data:`ARTICULATIONS`
+lists the choices) that selects *how* the same note sequence is turned into
+sound. The notes never change — only the synthesis does:
+
+* ``"discrete"`` — the original per-note synth: each :class:`NoteEvent`
+  becomes its own short additive tone (see :func:`_render_discrete`), with
+  silence possible between notes. This is the default *of this module's
+  functions* (unchanged, byte-identical to every prior release) — a "music
+  box".
+* ``"speechy"``, ``"smooth"``, ``"alien"`` — a single continuous,
+  phase-integrated oscillator that glides between consecutive note pitches
+  (legato + portamento; see :func:`_render_glide`), never falling silent
+  mid-phrase. The three styles share one algorithm and differ only in how
+  much of each inter-note interval is spent gliding and how much vibrato is
+  applied — see :data:`ARTICULATIONS` for the exact numbers. This reads as
+  speech, or an alien voice, rather than a sequence of separate notes.
+
+Discrete synthesis approach
+-----------------------------
 Each :class:`~harmonics.notes.NoteEvent` becomes a short additive tone: its
 MIDI ``pitch`` maps to a frequency (``440 * 2**((pitch-69)/12)``), a small
 table of harmonic partials (:data:`_VOICE_PARTIALS`, keyed by ``voice`` so
@@ -32,9 +52,23 @@ clicks in or out, and scaled by the note's ``velocity``. Notes are placed at
 their own ``start``/``duration`` (seconds, relative to the gesture's own
 onset — see ``harmonics/notes.py``) into one running mix buffer, which is
 then soft-limited (a gentle ``tanh`` knee above 0.9 amplitude, matching the
-approach in ``league/replay/audio.py``) and quantized to 16-bit PCM. Nothing
-here is seeded/random, so the same sequence always mixes to the same floats
-and therefore the same bytes: **same seq -> byte-identical WAV**.
+approach in ``league/replay/audio.py``) and quantized to 16-bit PCM.
+
+Glide synthesis approach
+--------------------------
+:func:`_render_glide` walks the mix sample-by-sample: it holds each note's
+pitch, then glides (a smoothstep ramp) to the next note's pitch over the
+final ``glide_frac`` share of the inter-onset interval, integrating phase
+continuously so the oscillator never resets or clicks. A small vibrato and a
+voice-ish falling-harmonic partial set (:data:`_GLIDE_PARTIALS`) give it an
+organic, vocal quality; a short global attack and a release tail
+(``tail`` seconds after the last note ends) bookend the whole phrase. This
+was prototyped and ear-approved before being ported here; the math is
+unchanged from the prototype.
+
+Nothing in this module is seeded/random or depends on wall-clock time, so
+the same inputs always render to the same floats and therefore the same
+bytes: **same (seq, sample_rate, articulation) -> byte-identical WAV.**
 """
 
 from __future__ import annotations
@@ -55,6 +89,10 @@ from harmonics.notes import NoteEvent
 CHANNELS = 1
 SAMPLE_WIDTH = 2  # bytes -> 16-bit PCM
 DEFAULT_SAMPLE_RATE = 44100
+
+_TWO_PI = 2.0 * math.pi
+
+# --- discrete articulation (the original per-note synth) ---------------------
 
 #: Attack/release shape shared by every note (seconds). Short enough to be
 #: inaudible as its own event, long enough that no note starts or ends with
@@ -83,10 +121,8 @@ _VOICE_PARTIALS: dict[str, tuple[tuple[float, float], ...]] = {
 #: quiet octave, so an unrecognized voice still renders a pleasant tone.
 _DEFAULT_PARTIALS: tuple[tuple[float, float], ...] = ((1.0, 1.0), (2.0, 0.2))
 
-_TWO_PI = 2.0 * math.pi
 
-
-def _midi_hz(pitch: int) -> float:
+def _midi_hz(pitch: float) -> float:
     """MIDI note number -> frequency in Hz (A4 = MIDI 69 = 440 Hz)."""
     return 440.0 * 2.0 ** ((pitch - 69) / 12)
 
@@ -135,7 +171,7 @@ def _mix_note(
 
 def _quantize(mix: array) -> bytes:
     """Soft-limit (a gentle ``tanh`` knee above 0.9) and convert to 16-bit
-    little-endian PCM bytes."""
+    little-endian PCM bytes. Used by the ``discrete`` articulation only."""
     n = len(mix)
     out = array("h", bytes(2 * n))
     tanh = math.tanh
@@ -152,14 +188,22 @@ def _quantize(mix: array) -> bytes:
     return out.tobytes()
 
 
-def render_wav(seq: Sequence[NoteEvent], *, sample_rate: int = DEFAULT_SAMPLE_RATE) -> bytes:
-    """Render a note sequence to mono 16-bit PCM WAV bytes.
+def _wav_bytes(pcm: bytes, sample_rate: int) -> bytes:
+    """Wrap already-quantized 16-bit PCM bytes in a mono WAV container."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(SAMPLE_WIDTH)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm)
+    return buf.getvalue()
 
-    Deterministic: the same ``seq`` (and ``sample_rate``) always renders to
-    byte-identical output — there is no randomness or wall-clock dependency
-    anywhere in this module. An empty sequence renders a valid, zero-length
-    WAV rather than raising.
-    """
+
+def _render_discrete(seq: Sequence[NoteEvent], sample_rate: int) -> bytes:
+    """The original per-note synth: unchanged, byte-identical to every prior
+    release of this module. Deterministic: the same ``seq``/``sample_rate``
+    always renders to byte-identical output. An empty sequence renders a
+    valid, zero-length WAV rather than raising."""
     placements: list[tuple[NoteEvent, int, int]] = []
     total_samples = 0
     for ev in seq:
@@ -172,29 +216,218 @@ def render_wav(seq: Sequence[NoteEvent], *, sample_rate: int = DEFAULT_SAMPLE_RA
     for ev, start_sample, num_samples in placements:
         _mix_note(mix, ev, start_sample, num_samples, sample_rate)
 
-    pcm = _quantize(mix)
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(SAMPLE_WIDTH)
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm)
-    return buf.getvalue()
+    return _wav_bytes(_quantize(mix), sample_rate)
+
+
+# --- glide articulations (speechy / smooth / alien) ---------------------------
+
+#: A voice-ish timbre: fundamental + falling harmonics (soft saw ~ vocal /
+#: reedy). Shared by every glide style — only the glide/vibrato shape below
+#: differs between them. Ported verbatim from the approved glide-lab
+#: prototype (``_VOICE``).
+_GLIDE_PARTIALS: tuple[tuple[float, float], ...] = (
+    (1.0, 1.0),
+    (2.0, 0.5),
+    (3.0, 0.33),
+    (4.0, 0.22),
+    (5.0, 0.13),
+    (6.0, 0.08),
+)
+
+#: Release tail (seconds) after the last note ends, shared by every glide
+#: style — ported verbatim from the prototype.
+_GLIDE_TAIL = 0.28
+
+#: Legato floor, shared by every glide style — ported verbatim from the
+#: prototype's amplitude-envelope math (see :func:`_render_glide`).
+_GLIDE_LEGATO_FLOOR = 0.55
+
+#: The four selectable articulation styles. ``"discrete"`` (``None``) is the
+#: original non-glide, per-note synth (see :func:`_render_discrete`); each
+#: other entry is the ``glide_frac``/``vibrato_hz``/``vibrato_cents`` triple
+#: fed to :func:`_render_glide` (``tail``/``legato_floor``/``partials`` are
+#: shared — see :data:`_GLIDE_TAIL`/:data:`_GLIDE_LEGATO_FLOOR`/
+#: :data:`_GLIDE_PARTIALS` above). Ordered gentlest -> most alien.
+ARTICULATIONS: dict[str, dict[str, float] | None] = {
+    "discrete": None,
+    "speechy": {"glide_frac": 0.50, "vibrato_cents": 14.0, "vibrato_hz": 5.0},
+    "smooth": {"glide_frac": 0.72, "vibrato_cents": 20.0, "vibrato_hz": 5.5},
+    "alien": {"glide_frac": 0.92, "vibrato_cents": 28.0, "vibrato_hz": 6.0},
+}
+
+
+def _smoothstep(x: float) -> float:
+    if x <= 0:
+        return 0.0
+    if x >= 1:
+        return 1.0
+    return x * x * (3 - 2 * x)
+
+
+def _glide_quantize(mix: array) -> bytes:
+    """Peak-normalize (to 0.82 headroom) then soft-limit (a ``tanh`` knee at
+    0.9, steeper than :func:`_quantize`'s) to 16-bit little-endian PCM bytes.
+
+    Differs from :func:`_quantize` (the ``discrete`` path): the glide voice
+    is one continuous, unbounded oscillator rather than a sum of many
+    independent, self-limited note envelopes, so it needs its own peak
+    normalization first. Ported verbatim from the approved glide-lab
+    prototype's ``_to_wav`` so the glide styles reproduce its sound exactly.
+    """
+    n = len(mix)
+    out = array("h", bytes(2 * n))
+    tanh = math.tanh
+    peak = 0.0
+    for v in mix:
+        if abs(v) > peak:
+            peak = abs(v)
+    norm = 0.82 / peak if peak > 1e-9 else 1.0
+    for i in range(n):
+        v = mix[i] * norm
+        if v > 0.9:
+            v = 0.9 + 0.1 * tanh((v - 0.9) * 10)
+        elif v < -0.9:
+            v = -0.9 - 0.1 * tanh((-0.9 - v) * 10)
+        out[i] = int(v * 32767)
+    if sys.byteorder == "big":  # pragma: no cover - WAV PCM is little-endian
+        out.byteswap()
+    return out.tobytes()
+
+
+def _render_glide(
+    seq: Sequence[NoteEvent],
+    *,
+    sample_rate: int,
+    glide_frac: float,
+    vibrato_hz: float,
+    vibrato_cents: float,
+    tail: float = _GLIDE_TAIL,
+    legato_floor: float = _GLIDE_LEGATO_FLOOR,
+    partials: tuple[tuple[float, float], ...] = _GLIDE_PARTIALS,
+) -> bytes:
+    """One continuous oscillator gliding through the note pitches.
+
+    ``glide_frac`` is the fraction of each inter-onset interval spent
+    sliding to the next pitch (the rest of the interval holds); ``0`` would
+    be stepped, ``1`` would always be gliding. Amplitude stays up between
+    words (``legato_floor``) so the voice never goes silent mid-phrase; a
+    light vibrato (``vibrato_hz``/``vibrato_cents``) gives the organic,
+    speech-or-alien quality. Ported verbatim (same math) from the approved
+    glide-lab prototype's ``render_glide``, minus its dead no-op
+    articulation-envelope code.
+    """
+    notes = sorted(seq, key=lambda ev: ev.start)
+    if not notes:
+        return _wav_bytes(_glide_quantize(array("d")), sample_rate)
+
+    onsets = [ev.start for ev in notes]
+    pitches = [float(ev.pitch) for ev in notes]
+    vels = [float(ev.velocity) for ev in notes]
+    last_end = notes[-1].start + notes[-1].duration
+    total = last_end + tail
+    n_samples = int(total * sample_rate)
+
+    mix = array("d", bytes(8 * n_samples))
+    phase = 0.0
+    seg = 0  # index of the current note (the pitch we're sitting on / gliding from)
+    sin = math.sin
+    for i in range(n_samples):
+        t = i / sample_rate
+        # advance current segment
+        while seg + 1 < len(onsets) and t >= onsets[seg + 1]:
+            seg += 1
+
+        # ---- pitch: hold this note, then glide to the next near its onset ----
+        if seg + 1 < len(onsets):
+            t0, t1 = onsets[seg], onsets[seg + 1]
+            interval = max(1e-6, t1 - t0)
+            glide_time = glide_frac * interval
+            gstart = t1 - glide_time
+            if t < gstart:
+                pitch = pitches[seg]
+                amp_base = vels[seg]
+            else:
+                f = _smoothstep((t - gstart) / max(1e-6, glide_time))
+                pitch = pitches[seg] + (pitches[seg + 1] - pitches[seg]) * f
+                amp_base = vels[seg] + (vels[seg + 1] - vels[seg]) * f
+        else:
+            pitch = pitches[seg]
+            amp_base = vels[seg]
+
+        # ---- vibrato + frequency ----
+        vib = 2.0 ** ((vibrato_cents / 1200.0) * sin(_TWO_PI * vibrato_hz * t))
+        freq = _midi_hz(pitch) * vib
+        phase += _TWO_PI * freq / sample_rate
+
+        # ---- amplitude: legato body + global attack/release ----
+        env = amp_base * (legato_floor + (1 - legato_floor))  # legato: stay up
+        atk = min(1.0, t / 0.035)  # global attack (35ms)
+        rel = 1.0 if t < last_end else max(0.0, 1.0 - (t - last_end) / tail)
+        gain = env * atk * rel
+
+        s = 0.0
+        for ratio, amp in partials:
+            s += amp * sin(ratio * phase)
+        s /= sum(a for _, a in partials)
+        mix[i] = gain * s
+
+    return _wav_bytes(_glide_quantize(mix), sample_rate)
+
+
+# --- public API ----------------------------------------------------------------
+
+
+def render_wav(
+    seq: Sequence[NoteEvent],
+    *,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    articulation: str = "discrete",
+) -> bytes:
+    """Render a note sequence to mono 16-bit PCM WAV bytes.
+
+    ``articulation`` selects HOW the notes are synthesized (see
+    :data:`ARTICULATIONS`); the note sequence itself never changes.
+    ``articulation="discrete"`` (the default, for backward compatibility) is
+    byte-identical to every prior release of this function. Deterministic:
+    the same ``(seq, sample_rate, articulation)`` always renders to
+    byte-identical output — there is no randomness or wall-clock dependency
+    anywhere in this module. An empty sequence renders a valid, zero-length
+    WAV rather than raising. Raises :class:`ValueError` for an unknown
+    ``articulation``.
+    """
+    if articulation not in ARTICULATIONS:
+        raise ValueError(
+            f"unknown articulation {articulation!r}; choose one of: "
+            + ", ".join(sorted(ARTICULATIONS))
+        )
+    params = ARTICULATIONS[articulation]
+    if params is None:  # "discrete" — the only non-glide entry
+        return _render_discrete(seq, sample_rate)
+    return _render_glide(seq, sample_rate=sample_rate, **params)
 
 
 def write_wav(
-    seq: Sequence[NoteEvent], path: str | Path, *, sample_rate: int = DEFAULT_SAMPLE_RATE
+    seq: Sequence[NoteEvent],
+    path: str | Path,
+    *,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    articulation: str = "discrete",
 ) -> None:
     """Render ``seq`` and write the WAV bytes to ``path``.
 
     No audio device is touched — this only writes a file, so it needs
     nothing beyond :func:`render_wav`'s own stdlib dependencies.
     """
-    data = render_wav(seq, sample_rate=sample_rate)
+    data = render_wav(seq, sample_rate=sample_rate, articulation=articulation)
     Path(path).write_bytes(data)
 
 
-def play(seq: Sequence[NoteEvent], *, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None:
+def play(
+    seq: Sequence[NoteEvent],
+    *,
+    sample_rate: int = DEFAULT_SAMPLE_RATE,
+    articulation: str = "discrete",
+) -> None:
     """Render ``seq`` and play it through a live playback backend.
 
     Tries an optional playback library, in order: ``simpleaudio``, then
@@ -206,7 +439,7 @@ def play(seq: Sequence[NoteEvent], *, sample_rate: int = DEFAULT_SAMPLE_RATE) ->
     remediation hint, instead of letting a bare ``ImportError`` (or a
     silent no-op) reach the caller.
     """
-    data = render_wav(seq, sample_rate=sample_rate)
+    data = render_wav(seq, sample_rate=sample_rate, articulation=articulation)
 
     try:
         import simpleaudio  # type: ignore[import-not-found]
@@ -234,11 +467,12 @@ def play(seq: Sequence[NoteEvent], *, sample_rate: int = DEFAULT_SAMPLE_RATE) ->
             framerate = wf.getframerate()
         samples = array("h")
         # ``frames`` is always little-endian 16-bit PCM (the WAV format's
-        # required byte order, guaranteed by :func:`_quantize` regardless of
-        # host endianness). ``array.frombytes`` has no notion of byte order
-        # of its own — it copies the raw bytes and interprets them using the
-        # HOST's native order. On a little-endian host that's a no-op; on a
-        # big-endian host it silently misreads every sample. So, mirroring
+        # required byte order, guaranteed by :func:`_quantize`/
+        # :func:`_glide_quantize` regardless of host endianness).
+        # ``array.frombytes`` has no notion of byte order of its own — it
+        # copies the raw bytes and interprets them using the HOST's native
+        # order. On a little-endian host that's a no-op; on a big-endian
+        # host it silently misreads every sample. So, mirroring
         # ``_quantize``'s own correction, byteswap back on a big-endian host
         # to undo that misinterpretation before handing samples to the
         # device.

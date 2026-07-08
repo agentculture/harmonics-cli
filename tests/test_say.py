@@ -294,6 +294,133 @@ def test_say_play_takes_priority_over_out(
     assert not target.exists()
 
 
+# --- --articulation: glide-by-default voice styles ---------------------------
+
+
+def test_say_articulation_alien_wav_writes_a_valid_wav_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "utterance.wav"
+    rc = main(["say", "all tests passed", "--articulation", "alien", "--wav", str(target)])
+    assert rc == 0
+    assert target.is_file()
+    with wave.open(str(target), "rb") as wf:
+        assert wf.getnchannels() == 1
+        assert wf.getsampwidth() == 2
+        assert wf.getnframes() > 0
+
+
+def test_say_default_articulation_wav_writes_a_valid_wav_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No ``--articulation`` at all -- the default (gliding) still writes a
+    valid WAV file."""
+    target = tmp_path / "utterance.wav"
+    rc = main(["say", "all tests passed", "--wav", str(target)])
+    assert rc == 0
+    with wave.open(str(target), "rb") as wf:
+        assert wf.getnframes() > 0
+
+
+def test_say_default_articulation_is_smooth(tmp_path: Path) -> None:
+    """The user asked for gliding by default -- verify the no-flag ``--wav``
+    output is byte-identical to explicit ``--articulation smooth``."""
+    default_target = tmp_path / "default.wav"
+    smooth_target = tmp_path / "smooth.wav"
+    rc1 = main(["say", "all tests passed", "--as", "harmonics-cli", "--wav", str(default_target)])
+    rc2 = main(
+        [
+            "say",
+            "all tests passed",
+            "--as",
+            "harmonics-cli",
+            "--articulation",
+            "smooth",
+            "--wav",
+            str(smooth_target),
+        ]
+    )
+    assert rc1 == rc2 == 0
+    assert default_target.read_bytes() == smooth_target.read_bytes()
+
+
+def test_say_articulation_discrete_wav_differs_from_default(tmp_path: Path) -> None:
+    discrete_target = tmp_path / "discrete.wav"
+    default_target = tmp_path / "default.wav"
+    main(
+        [
+            "say",
+            "all tests passed",
+            "--as",
+            "harmonics-cli",
+            "--articulation",
+            "discrete",
+            "--wav",
+            str(discrete_target),
+        ]
+    )
+    main(["say", "all tests passed", "--as", "harmonics-cli", "--wav", str(default_target)])
+    assert discrete_target.read_bytes() != default_target.read_bytes()
+
+
+def test_say_invalid_articulation_exits_1_structured(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["say", "all tests passed", "--articulation", "robotic"])
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error:")
+    assert "hint:" in err
+
+
+def test_say_json_output_identical_regardless_of_articulation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Articulation is a synth-only property -- dry-run/``--json`` note
+    output must not vary with it."""
+    rc1 = main(
+        ["say", "all tests passed", "--as", "harmonics-cli", "--articulation", "discrete", "--json"]
+    )
+    out1 = capsys.readouterr().out
+    rc2 = main(
+        ["say", "all tests passed", "--as", "harmonics-cli", "--articulation", "alien", "--json"]
+    )
+    out2 = capsys.readouterr().out
+    assert rc1 == rc2 == 0
+    assert out1 == out2
+
+
+def test_say_dry_run_text_identical_regardless_of_articulation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rc1 = main(["say", "all tests passed", "--as", "harmonics-cli", "--articulation", "speechy"])
+    out1 = capsys.readouterr().out
+    rc2 = main(["say", "all tests passed", "--as", "harmonics-cli", "--articulation", "alien"])
+    out2 = capsys.readouterr().out
+    assert rc1 == rc2 == 0
+    assert out1 == out2
+
+
+def test_say_midi_output_identical_regardless_of_articulation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``--midi`` is note-sequence output too -- must not vary with
+    ``--articulation``."""
+    discrete_target = tmp_path / "discrete.midi.json"
+    alien_target = tmp_path / "alien.midi.json"
+    main(
+        [
+            "say",
+            "all tests passed",
+            "--articulation",
+            "discrete",
+            "--midi",
+            str(discrete_target),
+        ]
+    )
+    main(["say", "all tests passed", "--articulation", "alien", "--midi", str(alien_target)])
+    assert discrete_target.read_text(encoding="utf-8") == alien_target.read_text(encoding="utf-8")
+
+
 # --- write-failure -> structured CliError, not a traceback (qodo #2) ---------
 
 

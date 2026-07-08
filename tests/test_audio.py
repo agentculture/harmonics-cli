@@ -15,10 +15,12 @@ import io
 import struct
 import sys
 import wave
+from array import array
 
 import pytest
 
 from harmonics.audio import DEFAULT_SAMPLE_RATE, play, render_wav, write_wav
+from harmonics.audio.synth import ARTICULATIONS
 from harmonics.cli._errors import EXIT_ENV_ERROR, CliError
 from harmonics.notes import NoteEvent
 from tests.ear_harness import assert_offline_no_audio
@@ -77,6 +79,98 @@ def test_render_wav_frame_count_covers_the_last_note() -> None:
     with wave.open(io.BytesIO(data), "rb") as wf:
         # start=1.0s + duration=0.5s at 1000 Hz -> at least 1500 frames.
         assert wf.getnframes() >= 1500
+
+
+# --- articulation: discrete (backward compat), speechy/smooth/alien (glide) --
+
+
+def test_articulations_table_has_the_four_named_styles() -> None:
+    assert set(ARTICULATIONS) == {"discrete", "speechy", "smooth", "alien"}
+    assert ARTICULATIONS["discrete"] is None
+
+
+def test_render_wav_default_articulation_is_discrete() -> None:
+    """Backward compat: the bare ``render_wav(seq)`` call (no ``articulation``
+    kwarg) must still be byte-identical to explicit ``articulation="discrete"``
+    -- and to every prior release's output, since ``discrete`` is unchanged."""
+    seq = _seq()
+    assert render_wav(seq) == render_wav(seq, articulation="discrete")
+
+
+@pytest.mark.parametrize("articulation", sorted(ARTICULATIONS))
+def test_render_wav_articulation_is_deterministic(articulation: str) -> None:
+    seq = _seq()
+    first = render_wav(seq, articulation=articulation)
+    second = render_wav(seq, articulation=articulation)
+    assert first == second
+
+
+@pytest.mark.parametrize("articulation", sorted(ARTICULATIONS))
+def test_render_wav_articulation_is_a_valid_wav(articulation: str) -> None:
+    data = render_wav(_seq(), articulation=articulation)
+    with wave.open(io.BytesIO(data), "rb") as wf:
+        assert wf.getnchannels() == 1
+        assert wf.getsampwidth() == 2
+        assert wf.getframerate() == DEFAULT_SAMPLE_RATE
+        assert wf.getnframes() > 0
+
+
+def test_render_wav_articulation_styles_all_differ_from_each_other() -> None:
+    seq = _seq()
+    renders = [render_wav(seq, articulation=name) for name in sorted(ARTICULATIONS)]
+    for i, a in enumerate(renders):
+        for b in renders[i + 1 :]:
+            assert a != b
+
+
+def test_render_wav_glide_styles_never_go_silent_between_notes() -> None:
+    """A glide articulation is one continuous oscillator -- unlike the
+    discrete path, it should never render a run of exact-zero samples
+    between two notes (the whole point of legato)."""
+    seq = _seq()
+    data = render_wav(seq, articulation="smooth")
+    with wave.open(io.BytesIO(data), "rb") as wf:
+        frames = wf.readframes(wf.getnframes())
+    samples = array("h")
+    samples.frombytes(frames)
+    if sys.byteorder == "big":
+        samples.byteswap()
+    # Sample right at the gap between note 0 (ends 0.2s) and note 1 (starts
+    # 0.2s) -- the discrete synth would be silent/near-silent there.
+    gap_index = int(0.2 * DEFAULT_SAMPLE_RATE)
+    assert any(abs(s) > 50 for s in samples[gap_index - 5 : gap_index + 5])
+
+
+def test_render_wav_unknown_articulation_raises_value_error() -> None:
+    with pytest.raises(ValueError):
+        render_wav(_seq(), articulation="robotic")
+
+
+def test_write_wav_threads_articulation_through_to_render(tmp_path) -> None:
+    seq = _seq()
+    target = tmp_path / "gesture.wav"
+    write_wav(seq, target, articulation="alien")
+    assert target.read_bytes() == render_wav(seq, articulation="alien")
+
+
+def test_play_threads_articulation_through_to_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_module = type(sys)("simpleaudio")
+    fake_module.WaveObject = _FakeWaveObject  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "simpleaudio", fake_module)
+
+    seq = _seq()
+    play(seq, articulation="alien")
+
+    with wave.open(io.BytesIO(render_wav(seq, articulation="alien")), "rb") as wf:
+        expected_frames = wf.readframes(wf.getnframes())
+    assert _FakeWaveObject.last_call is not None
+    audio_data, *_rest = _FakeWaveObject.last_call
+    assert audio_data == expected_frames
+
+
+def test_play_unknown_articulation_raises_value_error_before_touching_backend() -> None:
+    with pytest.raises(ValueError):
+        play(_seq(), articulation="robotic")
 
 
 # --- write_wav: writes a real file on disk -----------------------------------
