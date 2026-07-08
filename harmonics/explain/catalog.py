@@ -1,10 +1,15 @@
-"""Markdown catalog for ``harmonics-cli explain <path>``.
+"""Markdown catalog for ``harmonics explain <path>``.
 
-Each entry is verbatim markdown. Keys are command-path tuples. The empty tuple
-and ``("harmonics-cli",)`` both resolve to the root entry.
+Each entry is verbatim markdown. Keys are command-path tuples. The empty tuple,
+``("harmonics",)`` (the command name), and ``("harmonics-cli",)`` (the dist
+name) all resolve to the root entry.
 
 Keep bodies self-contained: an agent reading one entry should get enough
 context without chaining reads.
+
+Naming: the command is ``harmonics`` (what you type); ``harmonics-cli`` is the
+PyPI/dist name and identity. Runnable examples use ``harmonics``; the root page
+title and the root topic token stay ``harmonics-cli`` (the product itself).
 """
 
 from __future__ import annotations
@@ -18,14 +23,16 @@ A clonable template for AgentCulture mesh agents. It carries an agent-first CLI
 buildable/deployable package baseline. Clone it, rename the package, edit
 `culture.yaml`, and you have a new agent.
 
+Installed from PyPI as `harmonics-cli`; the command you run is `harmonics`.
+
 ## Verbs
 
-- `harmonics-cli whoami` — identity probe from `culture.yaml`.
-- `harmonics-cli learn` — structured self-teaching prompt.
-- `harmonics-cli explain <path>` — markdown docs for any noun/verb.
-- `harmonics-cli overview` — descriptive snapshot of the agent.
-- `harmonics-cli doctor` — check the agent-identity invariants.
-- `harmonics-cli cli overview` — describe the CLI surface.
+- `harmonics whoami` — identity probe from `culture.yaml`.
+- `harmonics learn` — structured self-teaching prompt.
+- `harmonics explain <path>` — markdown docs for any noun/verb.
+- `harmonics overview` — descriptive snapshot of the agent.
+- `harmonics doctor` — check the agent-identity invariants.
+- `harmonics cli overview` — describe the CLI surface.
 
 ## Exit-code policy
 
@@ -36,49 +43,49 @@ buildable/deployable package baseline. Clone it, rename the package, edit
 
 ## See also
 
-- `harmonics-cli explain whoami`
-- `harmonics-cli explain doctor`
+- `harmonics explain whoami`
+- `harmonics explain doctor`
 """
 
 _WHOAMI = """\
-# harmonics-cli whoami
+# harmonics whoami
 
 Reports the agent's identity from `culture.yaml`: nick (`suffix`), backend,
 served model, and the package version. Read-only.
 
 ## Usage
 
-    harmonics-cli whoami
-    harmonics-cli whoami --json
+    harmonics whoami
+    harmonics whoami --json
 """
 
 _LEARN = """\
-# harmonics-cli learn
+# harmonics learn
 
 Prints a structured self-teaching prompt covering purpose, command map,
 exit-code policy, `--json` support, and the `explain` pointer.
 
 ## Usage
 
-    harmonics-cli learn
-    harmonics-cli learn --json
+    harmonics learn
+    harmonics learn --json
 """
 
 _EXPLAIN = """\
-# harmonics-cli explain <path>
+# harmonics explain <path>
 
 Prints markdown documentation for any noun/verb path. Unlike `--help` (terse,
 positional), `explain` is global and addressable by path.
 
 ## Usage
 
-    harmonics-cli explain harmonics-cli
-    harmonics-cli explain whoami
-    harmonics-cli explain --json <path>
+    harmonics explain harmonics
+    harmonics explain whoami
+    harmonics explain --json <path>
 """
 
 _OVERVIEW = """\
-# harmonics-cli overview
+# harmonics overview
 
 Read-only descriptive snapshot of the agent: identity (from `culture.yaml`), the
 verb surface, and the sibling-pattern artifacts the template carries. Accepts an
@@ -86,12 +93,12 @@ ignored `target` so a stray path never hard-fails.
 
 ## Usage
 
-    harmonics-cli overview
-    harmonics-cli overview --json
+    harmonics overview
+    harmonics overview --json
 """
 
 _DOCTOR = """\
-# harmonics-cli doctor
+# harmonics doctor
 
 Checks the agent-identity invariants `steward doctor` verifies:
 prompt-file-present and backend-consistency (`colleague` → `AGENTS.colleague.md`), plus a
@@ -99,25 +106,26 @@ skills-present check. Exits 1 when unhealthy.
 
 ## Usage
 
-    harmonics-cli doctor
-    harmonics-cli doctor --json
+    harmonics doctor
+    harmonics doctor --json
 """
 
 _CLI = """\
-# harmonics-cli cli
+# harmonics cli
 
 Noun group for CLI-surface introspection. `cli overview` describes the CLI
 itself (distinct from the global `overview`, which describes the agent).
 
 ## Usage
 
-    harmonics-cli cli overview
-    harmonics-cli cli overview --json
+    harmonics cli overview
+    harmonics cli overview --json
 """
 
 
 ENTRIES: dict[tuple[str, ...], str] = {
     (): _ROOT,
+    ("harmonics",): _ROOT,
     ("harmonics-cli",): _ROOT,
     ("whoami",): _WHOAMI,
     ("learn",): _LEARN,

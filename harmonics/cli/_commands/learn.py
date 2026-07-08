@@ -1,4 +1,4 @@
-"""``harmonics-cli learn`` — the learnability affordance.
+"""``harmonics learn`` — the learnability affordance.
 
 Prints a structured self-teaching prompt. Must satisfy the agent-first rubric:
 >=200 chars and mention purpose, command map, exit codes, --json, and explain.
@@ -13,6 +13,7 @@ from harmonics.cli._output import emit_result
 
 _TEXT = """\
 harmonics-cli — a clonable template for AgentCulture mesh agents.
+Installed from PyPI as harmonics-cli; the command you run is `harmonics`.
 
 Purpose
 -------
@@ -23,12 +24,12 @@ rename the package, and edit culture.yaml to mint a new agent.
 
 Commands
 --------
-  harmonics-cli whoami             Identity from culture.yaml.
-  harmonics-cli learn              This self-teaching prompt.
-  harmonics-cli explain <path>...  Markdown docs for any noun/verb path.
-  harmonics-cli overview           Descriptive snapshot of the agent.
-  harmonics-cli doctor             Check the agent-identity invariants.
-  harmonics-cli cli overview       Describe the CLI surface itself.
+  harmonics whoami             Identity from culture.yaml.
+  harmonics learn              This self-teaching prompt.
+  harmonics explain <path>...  Markdown docs for any noun/verb path.
+  harmonics overview           Descriptive snapshot of the agent.
+  harmonics doctor             Check the agent-identity invariants.
+  harmonics cli overview       Describe the CLI surface itself.
 
 Machine-readable output
 -----------------------
@@ -44,7 +45,7 @@ Exit-code policy
 
 More detail
 -----------
-  harmonics-cli explain harmonics-cli
+  harmonics explain harmonics
 """
 
 
@@ -67,7 +68,7 @@ def _as_json_payload() -> dict[str, object]:
             "2": "environment/setup error",
         },
         "json_support": True,
-        "explain_pointer": "harmonics-cli explain <path>",
+        "explain_pointer": "harmonics explain <path>",
     }
 
 

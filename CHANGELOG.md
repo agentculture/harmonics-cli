@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-07-08
+
+### Changed
+
+- Re-initialized CLAUDE.md from the bootstrap seed into a full runtime prompt (via /init): the harmonics non-TTS-audio mission and intent -> sound design-spine table from issue #1, the agent-first CLI architecture (register(sub) command pattern, stdout/stderr + CliError + --json output contract, the tuple-keyed explain catalog, doctor rubric invariants), the uv build/test/lint commands, and the identity/version-bump/cite-dont-import conventions. Documented the command/dist name split (command `harmonics`, dist/identity `harmonics-cli`).
+- Made the CLI command name consistent so `harmonics <verb>` is what the docs actually show. The console script stays `harmonics` (matching the `culture`/`teken`/`devex` short-name convention); the runnable-command examples that previously read `harmonics-cli <verb>` — in the README, `learn` output, the `explain` catalog (headings + usage), argparse `prog`, `doctor`'s status header, `cli overview`'s subject, and the module docstrings — now read `harmonics <verb>`. Bare product/identity labels (root `explain`/`overview` page titles, the culture nick, `learn`'s JSON `tool` field, the PyPI dist name) stay `harmonics-cli`. Added `harmonics` as a root `explain` topic alias so `harmonics explain harmonics` resolves alongside `harmonics explain harmonics-cli`.
+
+### Fixed
+
+- Re-synced uv.lock to the 0.4.0 project version and recorded resolved dev-dependency entries (execnet, flake8).
+
 ## [0.4.0] - 2026-06-23
 
 ### Added

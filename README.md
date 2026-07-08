@@ -19,12 +19,15 @@ An agent + CLI giving agents and robots non-TTS (non-speech) audio: express mean
 ```bash
 uv sync
 uv run pytest -n auto                 # run the test suite
-uv run harmonics-cli whoami  # identity from culture.yaml
-uv run harmonics-cli learn   # self-teaching prompt (add --json)
+uv run harmonics whoami      # identity from culture.yaml
+uv run harmonics learn       # self-teaching prompt (add --json)
 uv run teken cli doctor . --strict    # the agent-first rubric gate CI runs
 ```
 
 ## CLI
+
+Installed from PyPI as `harmonics-cli` (`uv tool install harmonics-cli`); the
+command you run is `harmonics`.
 
 | Verb | What it does |
 |------|--------------|
