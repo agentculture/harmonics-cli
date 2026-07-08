@@ -115,9 +115,7 @@ def _as_json_payload() -> dict[str, object]:
                     "frontmatter type: command + trigger words + the two "
                     "pathways (say/play) and the axes"
                 ),
-                "scripts/talk.sh": (
-                    "print notes -> render --wav -> play via " "pw-play/paplay/aplay/ffplay/afplay"
-                ),
+                "scripts/talk.sh": "print notes, render --wav, then play via a system player",
             },
             "why_wav_not_play": (
                 "--play needs the optional harmonics-cli[audio] extra; a dev "
