@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-07-08
+
+### Added
+
+- harmonics say/play now taught in `harmonics learn` — the command map lists play/say/demo, plus a "Talking out loud" section and a step-by-step "Build a talk skill" recipe (text + structured JSON `voice`/`talk_skill` keys) so any agent can learn to speak.
+- New first-party `.claude/skills/talk/` skill: renders a sentence (`say`) or explicit axes (`play`) to a WAV and plays it through a system player (pw-play/paplay/aplay/ffplay/afplay), so the agent's non-speech voice is audible without the optional `[audio]` extra that `--play` needs.
+
+### Changed
+
+- `docs/skill-sources.md` now records `talk` as a first-party (non-vendored) skill so a guildmaster re-sync never clobbers it.
+
 ## [0.7.0] - 2026-07-08
 
 ### Added
