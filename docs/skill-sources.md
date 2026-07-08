@@ -35,6 +35,17 @@ is load-bearing, even where guildmaster's upstream copy omits it.
 | `assign-to-workforce` | `../guildmaster/.claude/skills/assign-to-workforce/` | **devague** (re-broadcast via guildmaster) | plan→parallel-implementation leg of the devague workflow chain. Verbatim (already carried `type: command`). | 2026-05-26 (guildmaster 0.6.0) |
 | `ask-colleague` | `../colleague/.claude/skills/ask-colleague/` | **colleague** (renamed from convertible; vendored directly — guildmaster re-broadcast pending) | The first-party front door to the `colleague` CLI: hand a scoped task to a *different* engine/mind via `explore` / `review` / `write`, grade a finished work item via `feedback` (the ROI loop), and reap stale/corrupt `colleague/*` branches a crashed run left behind via `clean`. Every verb takes `--json` (result JSON on stdout, diagnostics on stderr). `explore`/`review` run isolated in a throwaway `git worktree`; `write` **previews by default** (throwaway worktree, no side effects) and refuses a dirty tree only when applying (`--apply` / `--pr`). Verbatim except one consumer-identifying clause in the Provenance paragraph (`colleague vendors from guildmaster` → `harmonics-cli vendors from guildmaster`); already carried `type: command`. Optional runtime dep: **`colleague`** on PATH. | 2026-06-12 (colleague 1.7.0, direct) |
 
+## First-party skills (not vendored)
+
+These originate **in harmonics-cli** and are not pulled from any upstream. A
+re-sync must never overwrite or remove them; they carry `type: command` like the
+vendored ones so the `colleague`/`claude` backend's `core.skill_loader` picks
+them up.
+
+| Skill | Origin | Notes |
+|-------|--------|-------|
+| `talk` | harmonics-cli (first-party) | The front door for "talk to me": renders a sentence (`harmonics say`) or explicit axes (`harmonics play`) to a WAV and plays it through a system player (`pw-play`/`paplay`/`aplay`/…), so the agent's non-speech voice is audible even without the optional `harmonics-cli[audio]` extra that `--play` needs. `scripts/talk.sh` is pure passthrough to the harmonics verbs. Slated to be surfaced in `harmonics learn`. |
+
 ## Re-sync procedure
 
 ```bash

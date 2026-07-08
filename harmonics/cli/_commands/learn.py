@@ -31,7 +31,35 @@ Commands
   harmonics explain <path>...  Markdown docs for any noun/verb path.
   harmonics overview           Descriptive snapshot of the agent.
   harmonics doctor             Check the agent-identity invariants.
+  harmonics play  <axes>       Render explicit axes to notes (dry-run).
+  harmonics say   "<sentence>" Render a sentence in the agent's voice (dry-run).
+  harmonics demo               Tour the whole voice (play / gallery / stream).
   harmonics cli overview       Describe the CLI surface itself.
+
+Talking out loud
+----------------
+`say` and `play` are the voice. Both are DRY-RUN by default — they print a note
+sequence (`start dur pitch velocity timbre`), assert-able offline with no audio
+device. To actually sound it:
+  harmonics say "done, tests all green" --wav out.wav   # render a file (no extra)
+  harmonics say "done, tests all green" --play          # live (needs [audio] extra)
+Emphasize a word with *asterisks* or ALL-CAPS. `play` takes the axes as flags
+(--intent/--confidence/--urgency/--state/--as); `say` infers them from the
+sentence.
+
+Build a "talk" skill (so any agent can speak)
+---------------------------------------------
+Wrap the voice in a skill under `.claude/skills/talk/` so "talk to me" just works:
+  1. SKILL.md — frontmatter `type: command` (load-bearing for the skill loader)
+     plus a description with trigger words ("talk", "say something"). Document
+     the two pathways (`say` a sentence, `play` explicit axes) and the axes.
+  2. scripts/talk.sh — the "hear it" path that needs no audio backend:
+       a. print the dry-run notes  (harmonics say "$s"),
+       b. render a WAV            (harmonics say "$s" --wav "$f")  # stdlib, no extra,
+       c. play "$f" through the first of pw-play/paplay/aplay/ffplay/afplay.
+Prefer WAV+system-player over `--play`: `--play` needs the optional
+harmonics-cli[audio] extra, which a dev checkout deliberately omits. Keep the
+render offline and the palette pleasant — it plays next to a human.
 
 Machine-readable output
 -----------------------
@@ -66,8 +94,35 @@ def _as_json_payload() -> dict[str, object]:
             {"path": ["explain"], "summary": "Markdown docs by path."},
             {"path": ["overview"], "summary": "Descriptive snapshot of the agent."},
             {"path": ["doctor"], "summary": "Check the agent-identity invariants."},
+            {"path": ["play"], "summary": "Render explicit axes to notes (dry-run)."},
+            {"path": ["say"], "summary": "Render a sentence in the agent's voice (dry-run)."},
+            {"path": ["demo"], "summary": "Tour the whole voice (play / gallery / stream)."},
             {"path": ["cli", "overview"], "summary": "Describe the CLI surface."},
         ],
+        "voice": {
+            "verbs": ["say", "play"],
+            "dry_run_default": True,
+            "axes": ["intent", "confidence", "urgency", "state", "identity"],
+            "emphasis": "*asterisks* or ALL-CAPS raise a word",
+            "render_offline": "harmonics say '<sentence>' --wav out.wav",
+            "play_live": "harmonics say '<sentence>' --play  # needs harmonics-cli[audio]",
+        },
+        "talk_skill": {
+            "purpose": "Wrap the voice so any agent can talk out loud.",
+            "location": ".claude/skills/talk/",
+            "files": {
+                "SKILL.md": (
+                    "frontmatter type: command + trigger words + the two "
+                    "pathways (say/play) and the axes"
+                ),
+                "scripts/talk.sh": "print notes, render --wav, then play via a system player",
+            },
+            "why_wav_not_play": (
+                "--play needs the optional harmonics-cli[audio] extra; a dev "
+                "checkout omits it, so render --wav (stdlib, offline) and pipe "
+                "the file to a system player instead."
+            ),
+        },
         "exit_codes": {
             "0": "success",
             "1": "user-input error",
