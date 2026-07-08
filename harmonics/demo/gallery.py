@@ -24,7 +24,7 @@ import html
 
 from harmonics.demo.core import Clip
 
-_TITLE = "harmonics — voice showcase"
+_TITLE = "harmonics-cli — voice showcase"
 
 _INTRO = (
     "A self-contained tour of the harmonics voice: every intent, several agent "
@@ -195,7 +195,10 @@ def _audio_html(clip: Clip) -> str:
 
 
 def _clip_group(label: str) -> str:
-    return label.split(":", 1)[0]
+    # The group is the label's leading token before the first ":"; also strip a
+    # trailing " (agent)" qualifier so, e.g., "say (spark): ..." and "say: ..."
+    # both group under "say" instead of splitting into separate headers.
+    return label.split(":", 1)[0].split(" (", 1)[0]
 
 
 def _clip_html(index: int, clip: Clip) -> str:
@@ -226,8 +229,9 @@ def render_gallery(clips: list[Clip]) -> str:
     index in the list.
 
     One card is emitted per clip, in the given order; a section header is
-    emitted whenever the label's prefix before ``":"`` changes from the
-    previous clip's, grouping the tour without requiring any extra input.
+    emitted whenever the clip's group (its label prefix before ``":"``, minus
+    any ``" (agent)"`` qualifier) changes from the previous clip's, grouping
+    the tour without requiring any extra input.
     """
     body_sections: list[str] = []
     last_group: object = object()  # sentinel: never equals a real group name

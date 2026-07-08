@@ -73,6 +73,20 @@ def test_render_gallery_full_showcase_has_matching_clip_count() -> None:
     assert out.count("<audio") == len(clips)
 
 
+def test_say_clips_group_under_a_single_header() -> None:
+    # Regression: labels like "say (spark): ..." / "say (daria): ..." must group
+    # under one "say" header, not spawn a separate header per agent.
+    out = render_gallery(showcase())
+    assert out.count('class="group-header">say<') == 1
+
+
+def test_gallery_title_uses_the_product_name() -> None:
+    # Naming convention: bare product/page titles are "harmonics-cli", not the
+    # "harmonics" command name.
+    out = render_gallery(showcase()[:2])
+    assert "harmonics-cli — voice showcase" in out
+
+
 # --- no external references ----------------------------------------------------
 
 
