@@ -40,6 +40,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The **`say`** verb (`harmonics say "<sentence>"`) — infers axes, renders the
   text-tracking tune in the agent's voice, applies emphasis and micro-variation;
   same output/capture contract as `play`.
+- **`--articulation {discrete, speechy, smooth, alien}`** on both verbs — how the
+  synth *moves* between notes. `discrete` is the original per-note synth; the
+  glide styles run one continuous oscillator that slides (portamento) and stays
+  legato between word-pitches with a light vibrato, so the voice flows and reads
+  like speech. Defaults to `smooth` (gliding); affects `--wav`/`--play` only —
+  the note sequence is unchanged.
 - `docs/ear-test-protocol.md` — blind-listening protocols with stated
   better-than-chance bars for the human-discrimination claims.
 - `docs/specs/` + `docs/plans/` — the converged devague spec and buildable plan
