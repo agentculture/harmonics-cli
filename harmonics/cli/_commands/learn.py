@@ -12,15 +12,17 @@ from harmonics import __version__
 from harmonics.cli._output import emit_result
 
 _TEXT = """\
-harmonics-cli — a clonable template for AgentCulture mesh agents.
+harmonics-cli — an agent or robot's own non-speech VOICE.
 Installed from PyPI as harmonics-cli; the command you run is `harmonics`.
 
 Purpose
 -------
-Scaffold for a new Culture mesh agent: an agent-first CLI (cited from the teken
-`python-cli` reference), an identity (culture.yaml + CLAUDE.md), the canonical
-guildmaster skill kit under .claude/skills/, and a deploy/CI baseline. Clone it,
-rename the package, and edit culture.yaml to mint a new agent.
+The inverse of text-to-speech: render an agent's live meaning — intent,
+confidence, urgency, state, identity — into short, pleasant sonic gestures
+(chimes, flutes, pulses, motifs) a listener recognizes by who is speaking and
+what they mean. A first-person utterance the agent emits as itself, driven by
+its own axes — not a third-person spectator soundtrack, and never words or
+phonemes (text-to-notes, not TTS).
 
 Commands
 --------
@@ -53,7 +55,11 @@ def _as_json_payload() -> dict[str, object]:
     return {
         "tool": "harmonics-cli",
         "version": __version__,
-        "purpose": "Clonable scaffold for a new AgentCulture mesh agent.",
+        "purpose": (
+            "An agent or robot's own non-speech voice: render live "
+            "intent/confidence/urgency/state/identity into short, pleasant "
+            "sonic gestures (text-to-notes, the inverse of TTS)."
+        ),
         "commands": [
             {"path": ["whoami"], "summary": "Identity probe from culture.yaml."},
             {"path": ["learn"], "summary": "Self-teaching prompt."},

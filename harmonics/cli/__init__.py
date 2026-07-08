@@ -71,7 +71,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     parser = _CliArgumentParser(
         prog="harmonics",
-        description="harmonics-cli — a clonable template for AgentCulture mesh agents.",
+        description=(
+            "harmonics-cli — an agent or robot's own non-speech VOICE: render "
+            "live intent, confidence, urgency, state, and identity into short, "
+            "pleasant sonic gestures (text-to-notes, the inverse of TTS)."
+        ),
     )
     parser.add_argument(
         "--version",
