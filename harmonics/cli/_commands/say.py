@@ -80,6 +80,11 @@ tried in order: ``simpleaudio``, then ``sounddevice``) if either is
 installed; with neither installed it fails loudly with a friendly
 ``CliError`` hint rather than silently no-op'ing — use ``--wav`` instead when
 you just want a file and no device at all.
+
+``--articulation`` (default ``"smooth"``) selects HOW ``--wav``/``--play``
+synthesize the utterance — a continuous gliding voice by default, or the
+original discrete per-note tones (``discrete``) — without ever changing the
+note sequence itself; see :mod:`harmonics.audio.synth` for the four styles.
 """
 
 from __future__ import annotations
@@ -90,7 +95,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from harmonics.axes import Axes
-from harmonics.cli._errors import EXIT_ENV_ERROR, CliError
+from harmonics.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from harmonics.cli._output import emit_result
 from harmonics.contour import text_contour
 from harmonics.identity import derive_signature, signature_for
@@ -218,7 +223,20 @@ def _raise_write_error(path: str, err: OSError) -> None:
     ) from err
 
 
-def _play_live(seq: list[NoteEvent], json_mode: bool) -> None:
+def _raise_articulation_error(articulation: str, err: ValueError) -> None:
+    """Translate an unknown-articulation :class:`ValueError` from
+    :mod:`harmonics.audio` into the structured :class:`CliError` contract.
+    Unreachable in normal CLI use (``--articulation`` is constrained by
+    argparse ``choices=``) but keeps the contract honest for any other
+    caller of these helpers."""
+    raise CliError(
+        code=EXIT_USER_ERROR,
+        message=f"invalid articulation {articulation!r}: {err}",
+        remediation="choose one of: discrete, speechy, smooth, alien",
+    ) from err
+
+
+def _play_live(seq: list[NoteEvent], articulation: str, json_mode: bool) -> None:
     """``--play``: render and play ``seq`` through a live backend."""
     # Lazy import: harmonics.audio's own optional playback backend is
     # isolated behind this call, so importing this module (and every other
@@ -229,7 +247,10 @@ def _play_live(seq: list[NoteEvent], json_mode: bool) -> None:
     # --wav.
     from harmonics.audio import play as play_audio
 
-    play_audio(seq)
+    try:
+        play_audio(seq, articulation=articulation)
+    except ValueError as err:
+        _raise_articulation_error(articulation, err)
     if json_mode:
         emit_result({"played": True, "notes": len(seq)}, json_mode=True)
     else:
@@ -252,12 +273,14 @@ def _write_midi_file(seq: list[NoteEvent], path: str) -> None:
         _raise_write_error(path, err)
 
 
-def _write_wav_file(seq: list[NoteEvent], path: str) -> None:
+def _write_wav_file(seq: list[NoteEvent], path: str, articulation: str) -> None:
     """``--wav``: render and write a WAV file — no live device needed."""
     from harmonics.audio import write_wav
 
     try:
-        write_wav(seq, path)
+        write_wav(seq, path, articulation=articulation)
+    except ValueError as err:
+        _raise_articulation_error(articulation, err)
     except OSError as err:
         _raise_write_error(path, err)
 
@@ -274,7 +297,7 @@ def _write_requested_files(seq: list[NoteEvent], args: argparse.Namespace) -> li
         _write_midi_file(seq, args.midi)
         wrote.append(args.midi)
     if args.wav:
-        _write_wav_file(seq, args.wav)
+        _write_wav_file(seq, args.wav, args.articulation)
         wrote.append(args.wav)
     return wrote
 
@@ -292,7 +315,7 @@ def _emit(seq: list[NoteEvent], args: argparse.Namespace, json_mode: bool) -> No
     write whichever of ``--out``/``--midi``/``--wav`` were requested (any
     combination), or fall back to the dry-run default."""
     if args.play:
-        _play_live(seq, json_mode)
+        _play_live(seq, args.articulation, json_mode)
         return
 
     wrote = _write_requested_files(seq, args)
@@ -376,6 +399,17 @@ def register(sub: argparse._SubParsersAction) -> None:
             "Render and play audio live via 'simpleaudio' or 'sounddevice' if "
             "installed; otherwise fails with a friendly error (use --wav to "
             "capture to a file with no device)."
+        ),
+    )
+    p.add_argument(
+        "--articulation",
+        choices=("discrete", "speechy", "smooth", "alien"),
+        default="smooth",
+        help=(
+            "How the voice moves between notes, for --wav/--play only (the "
+            "note sequence itself never changes): 'discrete' is separate "
+            "per-note tones; 'speechy'/'smooth'/'alien' are one continuous "
+            "gliding voice, increasingly slurred/vibrato'd. Default: smooth."
         ),
     )
     p.set_defaults(func=cmd_say)
