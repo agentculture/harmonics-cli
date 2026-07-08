@@ -220,3 +220,101 @@ def test_play_clips_default_gap_is_positive() -> None:
 
     sig = inspect.signature(play_clips)
     assert sig.parameters["gap_seconds"].default == pytest.approx(0.4)
+
+
+# --- play_clips(): output-device selection (device param threaded through) --
+
+
+class _FakeSoundDeviceWithDevices:
+    """Fake sounddevice exposing ``query_devices()`` so
+    :func:`~harmonics.audio.synth._select_output_device`'s auto-selection
+    logic can be exercised, and a ``play()`` that records the resolved
+    ``device=`` kwarg (unlike :class:`_FakeSoundDevice` above, which has no
+    device-selection support at all)."""
+
+    def __init__(self, devices: list[dict]) -> None:
+        self.devices = devices
+        self.played: tuple | None = None
+        self.device: int | str | None = None
+        self.waited = False
+
+    def query_devices(self) -> list[dict]:
+        return self.devices
+
+    def play(self, samples, samplerate, device=None) -> None:  # noqa: ANN001
+        self.played = (samples, samplerate)
+        self.device = device
+
+    def wait(self) -> None:
+        self.waited = True
+
+
+def test_play_clips_forwards_explicit_device_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    fake_sd = _FakeSoundDeviceWithDevices([])
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    from harmonics.demo.play import play_clips
+
+    clip = _make_clip("one")
+    play_clips([clip], gap_seconds=0.0, device="pipewire")
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == "pipewire"
+
+
+def test_play_clips_auto_selects_pipewire_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    devices = [
+        {"name": "HDA default", "max_output_channels": 2},
+        {"name": "pipewire", "max_output_channels": 64},
+    ]
+    fake_sd = _FakeSoundDeviceWithDevices(devices)
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    from harmonics.demo.play import play_clips
+
+    clip = _make_clip("one")
+    play_clips([clip], gap_seconds=0.0)
+
+    assert fake_sd.played is not None
+    assert fake_sd.device == 1
+
+
+class _FakeSoundDeviceRaisingOnPlay:
+    """Fake sounddevice whose ``play()`` always raises, to exercise the
+    friendly ``CliError`` conversion for a real device failure."""
+
+    def __init__(self, devices: list[dict] | None = None) -> None:
+        self.devices = devices if devices is not None else []
+
+    def query_devices(self) -> list[dict]:
+        return self.devices
+
+    def play(self, samples, samplerate, device=None) -> None:  # noqa: ANN001
+        raise RuntimeError("Invalid sample rate")
+
+    def wait(self) -> None:  # pragma: no cover - never reached, play() raises first
+        pass
+
+
+def test_play_clips_sounddevice_failure_raises_friendly_cli_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(sys.modules, "simpleaudio", None)
+    fake_sd = _FakeSoundDeviceRaisingOnPlay()
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+
+    from harmonics.demo.play import play_clips
+
+    clip = _make_clip("one")
+    with pytest.raises(CliError) as exc:
+        play_clips([clip], gap_seconds=0.0)
+
+    assert exc.value.code == EXIT_ENV_ERROR
+    assert "--device" in exc.value.remediation
+    assert "--wav" in exc.value.remediation

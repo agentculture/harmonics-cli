@@ -86,14 +86,33 @@ command you run is `harmonics`.
 | `explain <path>` | Markdown docs for any noun/verb path. |
 | `overview` | Read-only descriptive snapshot of the agent. |
 | `doctor` | Check the agent-identity invariants (prompt-file-present, backend-consistency). |
-| `play` | Render explicit axes to a note sequence (dry-run; `--wav`/`--play` for audio). |
+| `play` | Render explicit axes to a note sequence (dry-run; `--wav`/`--play` for audio, `--device` to pick the output). |
 | `say "<sentence>"` | Infer axes from a sentence and render it in the agent's voice. |
-| `demo` | Tour the whole voice: `--play` / `--html` / `--wav` / `--out` / `--json` (dry-run by default). |
+| `demo` | Tour the whole voice: `--play` / `--html` / `--wav` / `--out` / `--json` (dry-run by default; `--device` picks `--play`'s output). |
 | `cli overview` | Describe the CLI surface itself. |
 
 Every command supports `--json`. Results go to stdout, errors/diagnostics to
 stderr (never mixed). Exit codes: `0` success, `1` user error, `2` environment
 error, `3+` reserved.
+
+### Live playback (`--play`)
+
+The core (text→notes plus offline WAV render) is dependency-free, so a plain
+install can already write audio — `--wav`/`--out`/`--html` need no extra. Live
+playback (`--play`) needs a real audio backend, kept out of the core deps and
+behind an opt-in extra:
+
+```bash
+uv tool install 'harmonics-cli[audio]'     # or: pip install 'harmonics-cli[audio]'
+# already installed? re-run with --force, or inject into the existing tool env:
+uv tool install --force --with sounddevice --with numpy harmonics-cli
+```
+
+The `audio` extra pulls in [`sounddevice`](https://python-sounddevice.readthedocs.io/)
+(ships wheels bundling PortAudio) and `numpy`. A hand-installed `simpleaudio`
+also works. With no backend, `--play` fails with a friendly hint (exit 2) — it
+never crashes or silently no-ops — so fall back to `--wav out.wav` to write a
+file instead.
 
 ## Contributing
 

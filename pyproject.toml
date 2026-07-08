@@ -1,6 +1,6 @@
 [project]
 name = "harmonics-cli"
-version = "0.6.0"
+version = "0.7.0"
 description = "An agent + CLI giving agents and robots non-TTS (non-speech) audio: express meaning through pleasant sonic signatures — chimes, flutes, pulses, and tonal motifs mapped to intent, confidence, urgency, state, and identity. Turns text/sentences into notes and audio (text-to-notes / text-to-audio)."
 readme = "README.md"
 license = "Apache-2.0"
@@ -14,6 +14,22 @@ classifiers = [
     "Intended Audience :: Developers",
 ]
 dependencies = []
+
+# Opt-in audio I/O. The core (text->notes + offline WAV render) stays
+# dependency-free and offline-testable — see CLAUDE.md's "runtime dependencies
+# stay empty" invariant — so live playback is isolated behind this extra rather
+# than in `dependencies`. `harmonics play`/`say`/`demo` only need it for the
+# live `--play` flag; `--wav`/`--out`/`--html` and every read/describe verb work
+# with no extra installed.
+#
+#   uv tool install 'harmonics-cli[audio]'     # or: pip install 'harmonics-cli[audio]'
+#
+# sounddevice ships manylinux/macOS/Windows wheels that bundle PortAudio (no
+# compiler needed, unlike simpleaudio, which has no cp312 wheels); its
+# `play()` convenience function requires numpy. `harmonics.audio.play` still
+# also accepts a hand-installed `simpleaudio` if you prefer it.
+[project.optional-dependencies]
+audio = ["sounddevice>=0.4.6", "numpy>=1.24"]
 
 [project.urls]
 Homepage = "https://github.com/agentculture/harmonics-cli"

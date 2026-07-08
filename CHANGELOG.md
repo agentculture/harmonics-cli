@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-08
+
+### Added
+
+- **Live playback is now installable** — an opt-in `audio` extra
+  (`uv tool install 'harmonics-cli[audio]'` / `pip install 'harmonics-cli[audio]'`)
+  pulls in `sounddevice` (ships wheels bundling PortAudio) and `numpy`, so
+  `--play` works out of the box. The core install stays dependency-free and
+  offline-testable — `--wav`/`--out`/`--html` and every read verb need no extra
+  — so the "runtime dependencies stay empty" invariant is preserved (the extra
+  is opt-in; importing the package still requires no sound stack).
+- **`--device NAME|INDEX`** on `play` / `say` / `demo`, plus a
+  `$HARMONICS_AUDIO_DEVICE` env var (the flag overrides the env var), selecting
+  the output device for `--play`. When unset, playback prefers a resampling
+  sound-server device (**pipewire**, then **pulse**) over the raw ALSA default,
+  so `--play` works on a host whose default sink is a fixed-rate device (e.g. a
+  16 kHz USB audio adapter) that would otherwise reject the synth's 44.1 kHz.
+
+### Changed
+
+- A live-device failure (e.g. a PortAudio invalid-sample-rate error) now surfaces
+  as a friendly environment error (exit `2`) that names the failure, lists the
+  available output devices, and points at `--device` / `--wav` — instead of the
+  generic "unexpected error, file a bug" wrapper (it is not a bug; the device or
+  its routing is the problem).
+- `--play`'s help text and the offline backend's "no backend" remediation now
+  point at the `harmonics-cli[audio]` extra.
+
 ## [0.6.0] - 2026-07-08
 
 ### Added
