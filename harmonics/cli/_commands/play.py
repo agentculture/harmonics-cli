@@ -23,11 +23,14 @@ isolation:
 loop. With no ``--out``/``--wav``/``--play``, this verb only prints the note
 sequence to stdout: no file is written, no sound is made. ``--out FILE``
 captures the note sequence as JSON and ``--wav FILE`` renders and writes an
-actual WAV file (:mod:`harmonics.audio`) — neither needs a live audio device.
-``--play`` renders the gesture and plays it through a live backend
+actual WAV file (:mod:`harmonics.audio`) — neither needs a live audio device,
+and either raises a structured :class:`~harmonics.cli._errors.CliError` (not a
+bare traceback) if the write itself fails, e.g. a missing parent directory.
+``--play`` renders the gesture and plays it via a live backend
 (:func:`harmonics.audio.play`, tried in order: ``simpleaudio``, then
-``sounddevice``); with neither installed it fails loudly with a friendly
-``CliError`` hint rather than silently no-op'ing.
+``sounddevice``) if either is installed; with neither installed it fails
+loudly with a friendly ``CliError`` hint rather than silently no-op'ing — use
+``--wav`` instead when you just want a file and no device at all.
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ import argparse
 from pathlib import Path
 
 from harmonics.axes import CONFIDENCES, INTENTS, STATES, URGENCIES, Axes
-from harmonics.cli._errors import EXIT_USER_ERROR, CliError
+from harmonics.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, CliError
 from harmonics.cli._output import emit_result
 from harmonics.identity import derive_signature, signature_for
 from harmonics.mapping import render_gesture
@@ -84,7 +87,81 @@ def _format_text(notes: list[NoteEvent]) -> str:
     return "\n".join(lines)
 
 
-def cmd_play(args: argparse.Namespace) -> int:
+def _raise_write_error(path: str, err: OSError) -> None:
+    """Translate an ``OSError`` from a file write into the structured
+    :class:`CliError` contract (missing parent dir, permission denied, disk
+    full, …) instead of letting it bubble up as an "unexpected" error."""
+    raise CliError(
+        code=EXIT_ENV_ERROR,
+        message=f"could not write {path}: {err}",
+        remediation="check the path, permissions, and that the parent directory exists",
+    ) from err
+
+
+def _play_live(notes: list[NoteEvent], json_mode: bool) -> None:
+    """``--play``: render and play ``notes`` through a live backend."""
+    # Lazy import: harmonics.audio's own optional playback backend is
+    # isolated behind this call, so importing this module (and every other
+    # CLI path) never requires a sound stack. Tries 'simpleaudio' then
+    # 'sounddevice'; with neither installed, harmonics.audio.play raises a
+    # friendly CliError rather than failing silently.
+    from harmonics.audio import play as play_audio
+
+    play_audio(notes)
+    if json_mode:
+        emit_result({"played": True, "notes": len(notes)}, json_mode=True)
+    else:
+        emit_result(f"played {len(notes)} note(s)", json_mode=False)
+
+
+def _write_wav_file(notes: list[NoteEvent], path: str, json_mode: bool) -> None:
+    """``--wav``: render and write a WAV file — no live device needed."""
+    from harmonics.audio import write_wav
+
+    try:
+        write_wav(notes, path)
+    except OSError as err:
+        _raise_write_error(path, err)
+    if json_mode:
+        emit_result({"wrote": path, "notes": len(notes)}, json_mode=True)
+    else:
+        emit_result(f"wrote {len(notes)} note(s) to {path}", json_mode=False)
+
+
+def _write_out_file(notes: list[NoteEvent], path: str, json_mode: bool) -> None:
+    """``--out``: write the note-sequence JSON to ``path``."""
+    try:
+        Path(path).write_text(sequence_to_json(notes), encoding="utf-8")
+    except OSError as err:
+        _raise_write_error(path, err)
+    if json_mode:
+        emit_result({"wrote": path, "notes": len(notes)}, json_mode=True)
+    else:
+        emit_result(f"wrote {len(notes)} note(s) to {path}", json_mode=False)
+
+
+def _dry_run(notes: list[NoteEvent], json_mode: bool) -> None:
+    """The dry-run default: print the note sequence, write no file, make no sound."""
+    if json_mode:
+        emit_result([ev.to_dict() for ev in notes], json_mode=True)
+    else:
+        emit_result(_format_text(notes), json_mode=False)
+
+
+def _emit(notes: list[NoteEvent], args: argparse.Namespace, json_mode: bool) -> None:
+    """Dispatch to the right output path: ``--play`` > ``--wav`` > ``--out`` >
+    the dry-run default — mirrors the priority documented on each flag."""
+    if args.play:
+        _play_live(notes, json_mode)
+    elif args.wav:
+        _write_wav_file(notes, args.wav, json_mode)
+    elif args.out:
+        _write_out_file(notes, args.out, json_mode)
+    else:
+        _dry_run(notes, json_mode)
+
+
+def cmd_play(args: argparse.Namespace) -> int | None:
     json_mode = bool(getattr(args, "json", False))
 
     axes = _build_axes(args)
@@ -94,43 +171,8 @@ def cmd_play(args: argparse.Namespace) -> int:
     if args.seq is not None:
         notes = apply_variation(notes, args.seq)
 
-    if args.play:
-        # Lazy import: harmonics.audio's own optional playback backend is
-        # isolated behind this call, so importing this module (and every
-        # other CLI path) never requires a sound stack.
-        from harmonics.audio import play as play_audio
-
-        play_audio(notes)
-        if json_mode:
-            emit_result({"played": True, "notes": len(notes)}, json_mode=True)
-        else:
-            emit_result(f"played {len(notes)} note(s)", json_mode=False)
-        return 0
-
-    if args.wav:
-        from harmonics.audio import write_wav
-
-        write_wav(notes, args.wav)
-        if json_mode:
-            emit_result({"wrote": args.wav, "notes": len(notes)}, json_mode=True)
-        else:
-            emit_result(f"wrote {len(notes)} note(s) to {args.wav}", json_mode=False)
-        return 0
-
-    if args.out:
-        Path(args.out).write_text(sequence_to_json(notes), encoding="utf-8")
-        if json_mode:
-            emit_result({"wrote": args.out, "notes": len(notes)}, json_mode=True)
-        else:
-            emit_result(f"wrote {len(notes)} note(s) to {args.out}", json_mode=False)
-        return 0
-
-    # Dry-run default: print the note sequence, write no file, make no sound.
-    if json_mode:
-        emit_result([ev.to_dict() for ev in notes], json_mode=True)
-    else:
-        emit_result(_format_text(notes), json_mode=False)
-    return 0
+    _emit(notes, args, json_mode)
+    return None
 
 
 def register(sub: argparse._SubParsersAction) -> None:
@@ -192,6 +234,10 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument(
         "--play",
         action="store_true",
-        help="Render and play audio live (needs 'simpleaudio' or 'sounddevice' installed).",
+        help=(
+            "Render and play audio live via 'simpleaudio' or 'sounddevice' if "
+            "installed; otherwise fails with a friendly error (use --wav to "
+            "capture to a file with no device)."
+        ),
     )
     p.set_defaults(func=cmd_play)
