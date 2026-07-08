@@ -1,6 +1,6 @@
 [project]
 name = "harmonics-cli"
-version = "0.4.0"
+version = "0.4.1"
 description = "An agent + CLI giving agents and robots non-TTS (non-speech) audio: express meaning through pleasant sonic signatures — chimes, flutes, pulses, and tonal motifs mapped to intent, confidence, urgency, state, and identity. Turns text/sentences into notes and audio (text-to-notes / text-to-audio)."
 readme = "README.md"
 license = "Apache-2.0"
