@@ -14,7 +14,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Re-synced uv.lock to the 0.4.0 project version and recorded resolved dev-dependency entries (execnet, flake8).
+- Re-synced `uv.lock`, which was stale at `0.3.4` on main, up to the `0.4.1` release, and recorded resolved dev-dependency entries (execnet, flake8).
 
 ## [0.4.0] - 2026-06-23
 
