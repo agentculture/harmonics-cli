@@ -5,17 +5,19 @@ Covers the acceptance criteria for the payoff text-to-notes verb: dry-run
 text/JSON output that tracks the sentence's words, determinism (repeat calls
 and ``--seq``), that inferred axes actually shade the render (a success
 sentence differs from a question), that emphasis markers audibly stress a
-word, ``--out``/``--midi`` file capture vs. the no-file dry-run default, the
-friendly not-yet-available ``--play`` error, and that ``harmonics explain
-say`` resolves. A few extra whitebox tests exercise the two axis-shading
-helpers directly (urgency -> tempo, confidence -> the ending) so shading is
-verified independently of the word-hash noise a sentence-level comparison
-carries.
+word, ``--out``/``--midi``/``--wav`` file capture vs. the no-file dry-run
+default, the friendly no-backend-installed ``--play`` error (cycle t12 — the
+offline audio backend exists now; CI simply has no playback library
+installed), and that ``harmonics explain say`` resolves. A few extra
+whitebox tests exercise the two axis-shading helpers directly (urgency ->
+tempo, confidence -> the ending) so shading is verified independently of the
+word-hash noise a sentence-level comparison carries.
 """
 
 from __future__ import annotations
 
 import json
+import wave
 from pathlib import Path
 
 import pytest
@@ -247,6 +249,21 @@ def test_say_midi_writes_midi_like_list(tmp_path: Path, capsys: pytest.CaptureFi
     assert str(target) in out
 
 
+def test_say_wav_writes_a_valid_wav_file(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "utterance.wav"
+    rc = main(["say", "all tests passed", "--wav", str(target)])
+    assert rc == 0
+    assert target.is_file()
+    with wave.open(str(target), "rb") as wf:
+        assert wf.getnchannels() == 1
+        assert wf.getsampwidth() == 2
+        assert wf.getnframes() > 0
+    out = capsys.readouterr().out.strip()
+    assert str(target) in out
+
+
 def test_say_default_writes_no_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     rc = main(["say", "all tests passed"])
     assert rc == 0
@@ -254,13 +271,18 @@ def test_say_default_writes_no_file(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert list(tmp_path.iterdir()) == []
 
 
-def test_say_flag_not_available_yet(capsys: pytest.CaptureFixture[str]) -> None:
+def test_say_flag_with_no_backend_installed(capsys: pytest.CaptureFixture[str]) -> None:
+    """CI (and this test env) has neither ``simpleaudio`` nor ``sounddevice``
+    installed, so ``--play`` surfaces the offline backend's friendly
+    ``CliError`` (exit 2) rather than a traceback or a silent no-op."""
     rc = main(["say", "all tests passed", "--play"])
     assert rc == 2
     err = capsys.readouterr().err
     assert err.startswith("error:")
-    assert "not available yet" in err
+    assert "no audio playback backend" in err
     assert "hint:" in err
+    assert "simpleaudio" in err
+    assert "sounddevice" in err
 
 
 def test_say_play_takes_priority_over_out(

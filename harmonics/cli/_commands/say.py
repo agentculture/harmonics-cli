@@ -62,12 +62,15 @@ long/loud* notes sound is shaded by meaning.
 
 Dry-run by default (matches ``play``)
 --------------------------------------
-With no ``--out``/``--midi``/``--play``, this verb only prints the note
-sequence: no file is written, no sound is made. ``--out FILE`` captures the
-note sequence as JSON; ``--midi FILE`` captures the MIDI-like tick
-representation (:func:`harmonics.notes.to_midi_notes`) — neither needs an
-audio backend. ``--play`` would produce actual sound, but the audio backend
-does not exist yet; it fails loudly with a friendly hint rather than silently
+With no ``--out``/``--midi``/``--wav``/``--play``, this verb only prints the
+note sequence: no file is written, no sound is made. ``--out FILE`` captures
+the note sequence as JSON; ``--midi FILE`` captures the MIDI-like tick
+representation (:func:`harmonics.notes.to_midi_notes`); ``--wav FILE``
+renders and writes an actual WAV file (:mod:`harmonics.audio`) — none of
+these three need a live audio device. ``--play`` renders the utterance and
+plays it through a live backend (:func:`harmonics.audio.play`, tried in
+order: ``simpleaudio``, then ``sounddevice``); with neither installed it
+fails loudly with a friendly ``CliError`` hint rather than silently
 no-op'ing.
 """
 
@@ -79,7 +82,6 @@ from dataclasses import replace
 from pathlib import Path
 
 from harmonics.axes import Axes
-from harmonics.cli._errors import EXIT_ENV_ERROR, CliError
 from harmonics.cli._output import emit_result
 from harmonics.contour import text_contour
 from harmonics.identity import derive_signature, signature_for
@@ -186,15 +188,6 @@ def _format_text(notes: list[NoteEvent]) -> str:
 def cmd_say(args: argparse.Namespace) -> int:
     json_mode = bool(getattr(args, "json", False))
 
-    if args.play:
-        # The audio backend is a later increment; fail loudly rather than
-        # silently no-op'ing so an agent never thinks sound played.
-        raise CliError(
-            code=EXIT_ENV_ERROR,
-            message="audio playback is not available yet",
-            remediation="use --out/--midi to capture the notes, or --json",
-        )
-
     clean, stressed = parse_emphasis(args.sentence)
     axes = infer_axes(clean)
     if args.as_agent:
@@ -209,6 +202,21 @@ def cmd_say(args: argparse.Namespace) -> int:
     if args.seq is not None:
         seq = apply_variation(seq, args.seq)
 
+    if args.play:
+        # Lazy import: harmonics.audio's own optional playback backend is
+        # isolated behind this call, so importing this module (and every
+        # other CLI path) never requires a sound stack. Checked before any
+        # file is written, so --play always takes priority over --out/
+        # --midi/--wav.
+        from harmonics.audio import play as play_audio
+
+        play_audio(seq)
+        if json_mode:
+            emit_result({"played": True, "notes": len(seq)}, json_mode=True)
+        else:
+            emit_result(f"played {len(seq)} note(s)", json_mode=False)
+        return 0
+
     wrote: list[str] = []
     if args.out:
         Path(args.out).write_text(sequence_to_json(seq), encoding="utf-8")
@@ -218,6 +226,11 @@ def cmd_say(args: argparse.Namespace) -> int:
             json.dumps(to_midi_notes(seq), ensure_ascii=False), encoding="utf-8"
         )
         wrote.append(args.midi)
+    if args.wav:
+        from harmonics.audio import write_wav
+
+        write_wav(seq, args.wav)
+        wrote.append(args.wav)
 
     if wrote:
         if json_mode:
@@ -271,8 +284,14 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="Write the MIDI-like note list (harmonics.notes.to_midi_notes) to FILE.",
     )
     p.add_argument(
+        "--wav",
+        default=None,
+        metavar="FILE",
+        help="Render and write a WAV audio file to FILE (no live device needed).",
+    )
+    p.add_argument(
         "--play",
         action="store_true",
-        help="Play audio (not available yet; use --out/--midi or --json instead).",
+        help="Render and play audio live (needs 'simpleaudio' or 'sounddevice' installed).",
     )
     p.set_defaults(func=cmd_say)
